@@ -51,6 +51,9 @@ class Client(Base):
     pipelines: Mapped[List["EnrichmentPipeline"]] = relationship(
         "EnrichmentPipeline", back_populates="client", cascade="all, delete-orphan"
     )
+    workflow_configs: Mapped[List["ClientWorkflowConfig"]] = relationship(
+        "ClientWorkflowConfig", back_populates="client", cascade="all, delete-orphan"
+    )
 
     def __repr__(self) -> str:
         return f"<Client(id={self.id}, name={self.name})>"
@@ -139,6 +142,12 @@ class BatchItem(Base):
     )
     enrichment_results: Mapped[List["EnrichmentResult"]] = relationship(
         "EnrichmentResult", back_populates="batch_item", cascade="all, delete-orphan"
+    )
+    work_history: Mapped[List["PersonWorkHistory"]] = relationship(
+        "PersonWorkHistory", back_populates="batch_item", cascade="all, delete-orphan"
+    )
+    final_lead: Mapped["FinalLead | None"] = relationship(
+        "FinalLead", back_populates="batch_item", cascade="all, delete-orphan", uselist=False
     )
 
     def __repr__(self) -> str:
@@ -280,6 +289,9 @@ class EnrichmentRegistry(Base):
     results: Mapped[List["EnrichmentResult"]] = relationship(
         "EnrichmentResult", back_populates="workflow"
     )
+    client_configs: Mapped[List["ClientWorkflowConfig"]] = relationship(
+        "ClientWorkflowConfig", back_populates="workflow"
+    )
 
     def __repr__(self) -> str:
         return f"<EnrichmentRegistry(slug={self.slug}, name={self.name}, type={self.type})>"
@@ -312,3 +324,115 @@ class EnrichmentResult(Base):
 
     def __repr__(self) -> str:
         return f"<EnrichmentResult(id={self.id}, item={self.batch_item_id}, workflow={self.workflow_slug})>"
+
+
+class ClientWorkflowConfig(Base):
+    """Client-specific configuration for workflow steps (e.g., Clay Table URLs, API keys)."""
+    __tablename__ = "client_workflow_configs"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    client_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("clients.id", ondelete="CASCADE"), nullable=False
+    )
+    workflow_slug: Mapped[str] = mapped_column(
+        String(255), ForeignKey("enrichment_registry.slug", ondelete="CASCADE"), nullable=False
+    )
+    config: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    client: Mapped["Client"] = relationship("Client", back_populates="workflow_configs")
+    workflow: Mapped["EnrichmentRegistry"] = relationship("EnrichmentRegistry", back_populates="client_configs")
+
+    __table_args__ = (
+        UniqueConstraint("client_id", "workflow_slug", name="uq_client_workflow_config"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<ClientWorkflowConfig(client_id={self.client_id}, workflow={self.workflow_slug})>"
+
+
+# =============================================================================
+# Phase 5: Extraction / Consolidation Tables
+# =============================================================================
+
+class PersonWorkHistory(Base):
+    """
+    Extracted work history from enrichment results.
+    Tracks where a person has worked (for GTM: "Find people who worked at Customer X").
+    """
+    __tablename__ = "person_work_history"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    batch_item_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("batch_items.id", ondelete="CASCADE"), nullable=False
+    )
+    company_name: Mapped[str] = mapped_column(String(512), nullable=False, index=True)
+    company_domain: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    title: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    start_date: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    end_date: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    is_current: Mapped[bool] = mapped_column(default=False, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    batch_item: Mapped["BatchItem"] = relationship("BatchItem", back_populates="work_history")
+
+    __table_args__ = (
+        Index("ix_person_work_history_company", "company_name"),
+        Index("ix_person_work_history_batch_item", "batch_item_id"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<PersonWorkHistory(id={self.id}, company={self.company_name}, title={self.title})>"
+
+
+class FinalLead(Base):
+    """
+    The "Gold" consolidated lead record.
+    Projects normalized/enriched data from multiple workflow steps into a single clean record.
+    """
+    __tablename__ = "final_leads"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    batch_item_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("batch_items.id", ondelete="CASCADE"), nullable=False, unique=True
+    )
+    # Person fields
+    first_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    last_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    full_name: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    email: Mapped[str | None] = mapped_column(String(512), nullable=True, index=True)
+    linkedin_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    title: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    # Company fields (normalized)
+    normalized_company_name: Mapped[str | None] = mapped_column(String(512), nullable=True, index=True)
+    normalized_company_domain: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    company_linkedin_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    industry: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    # Enrichment metadata
+    enrichment_source: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    enrichment_data: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    # Timestamps
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    batch_item: Mapped["BatchItem"] = relationship("BatchItem", back_populates="final_lead")
+
+    def __repr__(self) -> str:
+        return f"<FinalLead(id={self.id}, email={self.email}, company={self.normalized_company_name})>"

@@ -59,11 +59,19 @@ It allows the User ("The Agency") to ingest raw data (csv), define custom enrich
 ## 4. Immediate Next Steps (The "Configuration" Gap)
 
 **Problem**: The "Clay" workflows are generic code, but each Client has a unique Clay Table URL.
-**Solution**: **Phase 3.7: Client Workflow Configuration**.
+**Solution**: **Phase 3.7: Client Workflow Configuration (COMPLETED)**.
 
 1.  **Database**: `client_workflow_configs` table. (FK Client, FK Workflow Slug, JSON Config).
 2.  **UI**: Interface to set specific URLs/Keys for a Client's use of a Workflow.
 3.  **Backend**: Update Modal Workers to lookup this config at runtime.
+
+## 5. Phase 5: Result Extraction (Upcoming)
+
+**The Challenge**: We have JSONB blobs in `enrichment_results`. We need to query them efficiently (e.g. "Find all people who worked at Customer X").
+**The Solution**: Targeted Extraction Workflow.
+1.  Read `enrichment_results`.
+2.  Parse specific fields (Work History).
+3.  Write to Relational Tables (`person_work_history`).
 
 ## 5. Technical Context for Handover
 *   **Environment**: Python 3.10+, Node 18+.

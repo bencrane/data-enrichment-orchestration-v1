@@ -22,6 +22,7 @@ image = modal.Image.debian_slim(python_version="3.11").pip_install(
     "sqlalchemy[asyncio]",
     "asyncpg",
     "psycopg2-binary",
+    "requests",
 )
 
 
@@ -113,6 +114,95 @@ def _record_result(item_id: str, workflow_slug: str, output_dict: dict):
             ))
             conn.commit()
             print(f"[RESULT] item={item_id[:8]}... workflow={workflow_slug} recorded")
+    finally:
+        conn.close()
+
+
+def _get_client_config(item_id: str, workflow_slug: str) -> dict | None:
+    """
+    Fetch client-specific configuration for a workflow.
+
+    Traverses: batch_items -> batches -> client_workflow_configs
+
+    Args:
+        item_id: UUID of the batch_item
+        workflow_slug: The workflow slug to get config for
+
+    Returns:
+        The config dict from client_workflow_configs, or None if not found.
+    """
+    conn = get_sync_connection()
+    try:
+        with conn.cursor() as cur:
+            # Single query joining batch_items -> batches -> client_workflow_configs
+            cur.execute("""
+                SELECT cwc.config
+                FROM batch_items bi
+                JOIN batches b ON bi.batch_id = b.id
+                JOIN client_workflow_configs cwc ON b.client_id = cwc.client_id
+                WHERE bi.id = %s
+                AND cwc.workflow_slug = %s
+            """, (item_id, workflow_slug))
+
+            result = cur.fetchone()
+            if result and result[0]:
+                print(f"[CONFIG] item={item_id[:8]}... workflow={workflow_slug} -> config found")
+                return result[0]  # JSONB returns as Python dict
+            else:
+                print(f"[CONFIG] item={item_id[:8]}... workflow={workflow_slug} -> no config found")
+                return None
+    finally:
+        conn.close()
+
+
+def _get_batch_item_data(item_id: str) -> dict | None:
+    """
+    Fetch batch_item data for sending to Clay webhook.
+
+    Args:
+        item_id: UUID of the batch_item
+
+    Returns:
+        Dict with batch_item fields, or None if not found.
+    """
+    conn = get_sync_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT
+                    id,
+                    company_name,
+                    company_domain,
+                    company_linkedin_url,
+                    company_industry,
+                    company_city,
+                    company_state,
+                    company_country,
+                    person_first_name,
+                    person_last_name,
+                    person_linkedin_url,
+                    person_title
+                FROM batch_items
+                WHERE id = %s
+            """, (item_id,))
+
+            result = cur.fetchone()
+            if result:
+                return {
+                    "item_id": str(result[0]),
+                    "company_name": result[1],
+                    "company_domain": result[2],
+                    "company_linkedin_url": result[3],
+                    "company_industry": result[4],
+                    "company_city": result[5],
+                    "company_state": result[6],
+                    "company_country": result[7],
+                    "person_first_name": result[8],
+                    "person_last_name": result[9],
+                    "person_linkedin_url": result[10],
+                    "person_title": result[11],
+                }
+            return None
     finally:
         conn.close()
 
@@ -360,28 +450,85 @@ def receive_normalized_company_domain(item_id: str, payload: dict):
 @app.function(
     image=image,
     secrets=[modal.Secret.from_name("supabase-secrets")],
+    concurrency_limit=5,
 )
 def start_enrich_company_via_waterfall_in_clay(item_id: str):
     """
     Async Sender: Initiates company enrichment via Clay waterfall.
 
     This function:
-    1. Logs that we're sending to Clay for company enrichment
-    2. Sets state to IN_PROGRESS
-    3. DOES NOT call the receiver (strict decoupling)
+    1. Fetches client-specific config (webhook_url)
+    2. Fetches batch_item data for the payload
+    3. POSTs to Clay webhook with company data
+    4. Sets state to IN_PROGRESS
+    5. DOES NOT call the receiver (strict decoupling)
     """
+    import requests
+
     step_name = "enrich_company_via_waterfall_in_clay"
     print(f"[ASYNC SENDER] start_enrich_company_via_waterfall_in_clay called for item={item_id[:8]}...")
-    print(f"[ASYNC SENDER] Sending to Clay Waterfall (Company)...")
+
+    # Fetch client-specific configuration
+    config = _get_client_config(item_id, step_name)
+    webhook_url = config.get("webhook_url") if config else None
+
+    if not webhook_url:
+        print(f"[ASYNC SENDER] ERROR: No webhook_url configured for this client/workflow")
+        _update_state(item_id, step_name, "FAILED", meta={
+            "error": "No webhook_url configured",
+            "failed_at": datetime.now(timezone.utc).isoformat(),
+        })
+        return {"success": False, "item_id": item_id, "error": "No webhook_url configured"}
+
+    print(f"[ASYNC SENDER] Using webhook_url: {webhook_url}")
+
+    # Fetch batch_item data for the payload
+    item_data = _get_batch_item_data(item_id)
+    if not item_data:
+        print(f"[ASYNC SENDER] ERROR: BatchItem {item_id} not found")
+        _update_state(item_id, step_name, "FAILED", meta={
+            "error": "BatchItem not found",
+            "failed_at": datetime.now(timezone.utc).isoformat(),
+        })
+        return {"success": False, "item_id": item_id, "error": "BatchItem not found"}
+
+    # Build payload with company-specific fields
+    payload = {
+        "item_id": item_data["item_id"],
+        "company_name": item_data["company_name"],
+        "company_domain": item_data["company_domain"],
+        "company_linkedin_url": item_data["company_linkedin_url"],
+        "company_industry": item_data["company_industry"],
+        "company_city": item_data["company_city"],
+        "company_state": item_data["company_state"],
+        "company_country": item_data["company_country"],
+    }
+
+    print(f"[ASYNC SENDER] Sending to Clay Waterfall (Company): {payload}")
+
+    # POST to Clay webhook
+    try:
+        response = requests.post(webhook_url, json=payload, timeout=30)
+        response.raise_for_status()
+        print(f"[ASYNC SENDER] Clay webhook response: {response.status_code}")
+    except requests.exceptions.RequestException as e:
+        print(f"[ASYNC SENDER] ERROR: Clay webhook failed: {e}")
+        _update_state(item_id, step_name, "FAILED", meta={
+            "error": str(e),
+            "failed_at": datetime.now(timezone.utc).isoformat(),
+        })
+        return {"success": False, "item_id": item_id, "error": str(e)}
 
     # Set state to IN_PROGRESS
     _update_state(item_id, step_name, "IN_PROGRESS", meta={
         "sent_at": datetime.now(timezone.utc).isoformat(),
         "service": "clay_waterfall",
         "entity": "company",
+        "webhook_url": webhook_url,
+        "payload": payload,
     })
 
-    return {"success": True, "item_id": item_id, "status": "IN_PROGRESS"}
+    return {"success": True, "item_id": item_id, "status": "IN_PROGRESS", "webhook_url": webhook_url}
 
 
 @app.function(
@@ -424,28 +571,84 @@ def receive_enrich_company_via_waterfall_in_clay(item_id: str, payload: dict):
 @app.function(
     image=image,
     secrets=[modal.Secret.from_name("supabase-secrets")],
+    concurrency_limit=5,
 )
 def start_enrich_person_via_waterfall_in_clay(item_id: str):
     """
     Async Sender: Initiates person enrichment via Clay waterfall.
 
     This function:
-    1. Logs that we're sending to Clay for person enrichment
-    2. Sets state to IN_PROGRESS
-    3. DOES NOT call the receiver (strict decoupling)
+    1. Fetches client-specific config (webhook_url)
+    2. Fetches batch_item data for the payload
+    3. POSTs to Clay webhook with person data
+    4. Sets state to IN_PROGRESS
+    5. DOES NOT call the receiver (strict decoupling)
     """
+    import requests
+
     step_name = "enrich_person_via_waterfall_in_clay"
     print(f"[ASYNC SENDER] start_enrich_person_via_waterfall_in_clay called for item={item_id[:8]}...")
-    print(f"[ASYNC SENDER] Sending to Clay Waterfall (Person)...")
+
+    # Fetch client-specific configuration
+    config = _get_client_config(item_id, step_name)
+    webhook_url = config.get("webhook_url") if config else None
+
+    if not webhook_url:
+        print(f"[ASYNC SENDER] ERROR: No webhook_url configured for this client/workflow")
+        _update_state(item_id, step_name, "FAILED", meta={
+            "error": "No webhook_url configured",
+            "failed_at": datetime.now(timezone.utc).isoformat(),
+        })
+        return {"success": False, "item_id": item_id, "error": "No webhook_url configured"}
+
+    print(f"[ASYNC SENDER] Using webhook_url: {webhook_url}")
+
+    # Fetch batch_item data for the payload
+    item_data = _get_batch_item_data(item_id)
+    if not item_data:
+        print(f"[ASYNC SENDER] ERROR: BatchItem {item_id} not found")
+        _update_state(item_id, step_name, "FAILED", meta={
+            "error": "BatchItem not found",
+            "failed_at": datetime.now(timezone.utc).isoformat(),
+        })
+        return {"success": False, "item_id": item_id, "error": "BatchItem not found"}
+
+    # Build payload with person-specific fields
+    payload = {
+        "item_id": item_data["item_id"],
+        "person_first_name": item_data["person_first_name"],
+        "person_last_name": item_data["person_last_name"],
+        "person_linkedin_url": item_data["person_linkedin_url"],
+        "person_title": item_data["person_title"],
+        "company_name": item_data["company_name"],
+        "company_domain": item_data["company_domain"],
+    }
+
+    print(f"[ASYNC SENDER] Sending to Clay Waterfall (Person): {payload}")
+
+    # POST to Clay webhook
+    try:
+        response = requests.post(webhook_url, json=payload, timeout=30)
+        response.raise_for_status()
+        print(f"[ASYNC SENDER] Clay webhook response: {response.status_code}")
+    except requests.exceptions.RequestException as e:
+        print(f"[ASYNC SENDER] ERROR: Clay webhook failed: {e}")
+        _update_state(item_id, step_name, "FAILED", meta={
+            "error": str(e),
+            "failed_at": datetime.now(timezone.utc).isoformat(),
+        })
+        return {"success": False, "item_id": item_id, "error": str(e)}
 
     # Set state to IN_PROGRESS
     _update_state(item_id, step_name, "IN_PROGRESS", meta={
         "sent_at": datetime.now(timezone.utc).isoformat(),
         "service": "clay_waterfall",
         "entity": "person",
+        "webhook_url": webhook_url,
+        "payload": payload,
     })
 
-    return {"success": True, "item_id": item_id, "status": "IN_PROGRESS"}
+    return {"success": True, "item_id": item_id, "status": "IN_PROGRESS", "webhook_url": webhook_url}
 
 
 @app.function(

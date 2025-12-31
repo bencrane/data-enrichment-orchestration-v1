@@ -875,3 +875,98 @@ export async function startBatchFromSelectedRows(
 
   return { success: true, batchId, itemCount: insertedItemIds.length };
 }
+
+// ============ Client Workflow Configuration Actions ============
+
+export type ClientWorkflowConfig = {
+  id: string;
+  client_id: string;
+  workflow_slug: string;
+  config: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+};
+
+export async function getClientWorkflowConfig(
+  clientId: string,
+  workflowSlug: string
+): Promise<ClientWorkflowConfig | null> {
+  const { data, error } = await supabase
+    .from("client_workflow_configs")
+    .select("*")
+    .eq("client_id", clientId)
+    .eq("workflow_slug", workflowSlug)
+    .single();
+
+  if (error) {
+    // PGRST116 = no rows returned (not an error for our use case)
+    if (error.code === "PGRST116") {
+      return null;
+    }
+    console.error("Error fetching client workflow config:", error);
+    return null;
+  }
+  return data as ClientWorkflowConfig;
+}
+
+export async function getClientWorkflowConfigs(
+  clientId: string
+): Promise<ClientWorkflowConfig[]> {
+  const { data, error } = await supabase
+    .from("client_workflow_configs")
+    .select("*")
+    .eq("client_id", clientId)
+    .order("workflow_slug", { ascending: true });
+
+  if (error) {
+    console.error("Error fetching client workflow configs:", error);
+    return [];
+  }
+  return data as ClientWorkflowConfig[];
+}
+
+export async function saveClientWorkflowConfig(
+  clientId: string,
+  workflowSlug: string,
+  config: Record<string, unknown>
+): Promise<{ success: boolean; error?: string; config?: ClientWorkflowConfig }> {
+  // Use upsert to handle the unique constraint (client_id, workflow_slug)
+  const { data, error } = await supabase
+    .from("client_workflow_configs")
+    .upsert(
+      {
+        client_id: clientId,
+        workflow_slug: workflowSlug,
+        config: config,
+        updated_at: new Date().toISOString(),
+      },
+      {
+        onConflict: "client_id,workflow_slug",
+      }
+    )
+    .select()
+    .single();
+
+  if (error) {
+    console.error("Error saving client workflow config:", error);
+    return { success: false, error: error.message };
+  }
+  return { success: true, config: data as ClientWorkflowConfig };
+}
+
+export async function deleteClientWorkflowConfig(
+  clientId: string,
+  workflowSlug: string
+): Promise<{ success: boolean; error?: string }> {
+  const { error } = await supabase
+    .from("client_workflow_configs")
+    .delete()
+    .eq("client_id", clientId)
+    .eq("workflow_slug", workflowSlug);
+
+  if (error) {
+    console.error("Error deleting client workflow config:", error);
+    return { success: false, error: error.message };
+  }
+  return { success: true };
+}

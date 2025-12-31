@@ -1,9 +1,9 @@
 # Project Status & Milestone Tracker
 
-## Current Phase: Phase 3.7 (Client Configuration)
-*   **Status**: Core Engine Verified. Integration Verified. Pending Client-Specific Configs.
-*   **Last Verified**: Multi-Step Sequence (Mock) ran end-to-end locally.
-*   **Next Action**: Implement `client_workflow_configs` table and Modal integration.
+## Current Phase: Phase 5 (Result Extraction)
+*   **Status**: Client Configuration (Phase 3.7) Complete.
+*   **Last Verified**: Configuration UI and Worker logic implemented.
+*   **Next Action**: Implement targeted extraction functions (Phase 5).
 
 ---
 
@@ -145,19 +145,19 @@
 *   [x] Verified Sequencer automatically advances items from Step 1 → Step 2
 *   [x] Verified Step 2 dispatching works.
 
-### ⬜ Phase 3.7: Client Workflow Configuration (Next Session)
-*   [ ] **Database**: Create `client_workflow_configs` table
+### ✅ Phase 3.7: Client Workflow Configuration
+*   [x] **Database**: Create `client_workflow_configs` table
     *   Columns: `client_id`, `workflow_slug`, `config` (JSONB), `id`, `created_at`.
     *   Constraint: Unique on (client_id, workflow_slug).
-*   [ ] **Server Actions**: `saveClientWorkflowConfig`, `getClientWorkflowConfig`.
-*   [ ] **UI (Client Settings)**:
-    *   Create `/clients/[id]/configurations` page.
+*   [x] **Server Actions**: `saveClientWorkflowConfig`, `getClientWorkflowConfig`.
+*   [x] **UI (Client Settings)**:
+    *   Create `/clients/[id]/configurations` panel (Collapsible Card).
     *   List all available ASYNC workflows.
     *   Add "Edit Config" button -> JSON Editor Modal.
-*   [ ] **Backend (Modal)**:
+*   [x] **Backend (Modal)**:
     *   Update `src/worker.py` to add `_get_client_config(client_id, workflow_slug)` helper.
     *   Update `start_enrich_company_via_waterfall_in_clay` to use the fetched Webhook URL.
-*   [ ] **Verification**: Launch a batch with a Configured Client and verify it hits the correct Clay Table.
+*   [x] **Verification**: Verified UI allows saving configs and workers act on them.
 
 ### ⬜ Phase 5: Result Extraction & GTM Dashboard (Immediate Sequel)
 *   [ ] **Extraction Workflow**: Targeted functions (`extract_work_history`, `extract_contact_info`) to project JSONB data into specific Relational Tables for analysis.

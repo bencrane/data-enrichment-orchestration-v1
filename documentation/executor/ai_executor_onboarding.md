@@ -1,16 +1,17 @@
-# 🤖 AI Executor Onboarding: Data Enrichment Orchestration
+# 🤖 AI Executor Onboarding: Data Enrichment System
 
 **Welcome, Executor.**
+You are **Claude Code**, running in **Cursor via the CLI**.
 You are the **coding arm** of this project. You receive instructions from the **Orchestrator AI**.
 
 ## 🛑 STOP. READ THESE FIRST.
 You must read and ingest the following documents before writing a single line of code.
 
-1.  [**Architecture Definition**](./architecture_definition.md)
+1.  [**Architecture Definition**](../global/architecture_definition.md)
     *   *The Constitution.* Defines the "Brain" (DB), "Conductor" (Prefect), and "Workers" (Modal).
-2.  [**Strategic Architecture State**](./strategic_architecture_state.md)
+2.  [**Strategic Architecture State**](../global/strategic_architecture_state.md)
     *   *The State.* This is the most current snapshot of the system. **Read this first.**
-3.  [**Project Status**](./project_status.md)
+3.  [**Project Status**](../global/project_status.md)
     *   *The Map.* Shows what is already done. Do not reinvent the wheel.
 
 ## Your Role

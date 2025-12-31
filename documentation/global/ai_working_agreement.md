@@ -1,3 +1,4 @@
+c
 # AI Working Agreement & Operational Protocols
 
 ## 1. Core Operating Principles

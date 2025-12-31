@@ -13,6 +13,13 @@ import {
   CardDescription,
 } from "@/components/ui/card";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   getClientById,
   uploadApolloData,
   Client,
@@ -31,10 +38,14 @@ const HEADER_MAP: Record<string, keyof ApolloRow> = {
   "email status": "email_status",
   "linkedin url": "linkedin_url",
   "person linkedin url": "linkedin_url",
+  "linkedin link": "linkedin_url",
   "is likely to engage": "is_likely_to_engage",
   "city": "lead_city",
   "state": "lead_state",
   "country": "lead_country",
+  "lead city": "lead_city",
+  "lead state": "lead_state",
+  "lead country": "lead_country",
   "company": "company_name",
   "company name": "company_name",
   "industry": "industry",
@@ -46,17 +57,27 @@ const HEADER_MAP: Record<string, keyof ApolloRow> = {
   "functions": "functions",
   "website": "company_website",
   "company website": "company_website",
+  "company url": "company_website",
+  "url": "company_website",
+  "company website full": "company_website",
+  "domain": "company_website_short",
   "company domain": "company_website_short",
+  "company website short": "company_website_short",
   "blog url": "company_blog_url",
   "company blog url": "company_blog_url",
+  "company blog link": "company_blog_url",
   "twitter url": "company_twitter_url",
   "company twitter url": "company_twitter_url",
+  "company twitter link": "company_twitter_url",
   "facebook url": "company_facebook_url",
   "company facebook url": "company_facebook_url",
+  "company facebook link": "company_facebook_url",
   "linkedin url (company)": "company_linkedin_url",
   "company linkedin url": "company_linkedin_url",
+  "company linkedin link": "company_linkedin_url",
   "phone": "company_phone",
   "company phone": "company_phone",
+  "company phone number": "company_phone",
   "street": "company_street",
   "company street": "company_street",
   "company city": "company_city",
@@ -76,6 +97,7 @@ const HEADER_MAP: Record<string, keyof ApolloRow> = {
   "latest funding type": "company_latest_funding_type",
   "latest funding amount": "company_latest_funding_amount",
   "last raised at": "company_last_funding_date",
+  "last fund raised at": "company_last_funding_date",
   "keywords": "company_keywords",
   "company keywords": "company_keywords",
   "technologies": "company_technologies",
@@ -86,6 +108,7 @@ const HEADER_MAP: Record<string, keyof ApolloRow> = {
   "company seo description": "company_seo_description",
   "retail locations": "number_of_retail_locations",
   "# retail locations": "number_of_retail_locations",
+  "number of retail locations": "number_of_retail_locations",
   "founded year": "company_founded_year",
   "company founded year": "company_founded_year",
 };
@@ -106,16 +129,13 @@ function mapCsvRow(row: Record<string, string>): ApolloRow {
   return mapped;
 }
 
-function generateUploadId(): string {
-  return crypto.randomUUID();
-}
-
-export default function ApolloUploadsPage() {
+export default function UploadPage() {
   const params = useParams();
   const clientId = params.id as string;
 
   const [client, setClient] = useState<Client | null>(null);
   const [loading, setLoading] = useState(true);
+  const [uploadType, setUploadType] = useState<string>("apollo");
   const [uploading, setUploading] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const [parsedRows, setParsedRows] = useState<ApolloRow[]>([]);
@@ -145,9 +165,13 @@ export default function ApolloUploadsPage() {
     Papa.parse<Record<string, string>>(file, {
       header: true,
       skipEmptyLines: true,
+      delimiter: ",",
       complete: (result) => {
-        if (result.errors.length > 0) {
-          setParseError(`Parse error: ${result.errors[0].message}`);
+        const criticalErrors = result.errors.filter(
+          (e) => !e.message.includes("auto-detect delimiting character")
+        );
+        if (criticalErrors.length > 0) {
+          setParseError(`Parse error: ${criticalErrors[0].message}`);
           return;
         }
 
@@ -182,7 +206,6 @@ export default function ApolloUploadsPage() {
       e.preventDefault();
       e.stopPropagation();
       setDragActive(false);
-
       if (e.dataTransfer.files && e.dataTransfer.files[0]) {
         handleFile(e.dataTransfer.files[0]);
       }
@@ -205,7 +228,7 @@ export default function ApolloUploadsPage() {
     setUploading(true);
     setUploadResult(null);
 
-    const uploadId = generateUploadId();
+    const uploadId = crypto.randomUUID();
     const result = await uploadApolloData(clientId, uploadId, parsedRows);
 
     if (result.success) {
@@ -246,7 +269,7 @@ export default function ApolloUploadsPage() {
         <div className="container mx-auto px-6 py-4">
           <div className="flex items-center gap-4">
             <Link
-              href="/clients"
+              href={`/clients/${clientId}/apollo-ingest`}
               className="text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
             >
               <svg
@@ -266,10 +289,10 @@ export default function ApolloUploadsPage() {
             </Link>
             <div>
               <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">
-                Apollo Uploads
+                Upload Files
               </h1>
               <p className="text-sm text-zinc-500 dark:text-zinc-400">
-                {client.company_name} ({client.company_domain})
+                {client.company_name} - Upload Apollo CSV exports
               </p>
             </div>
           </div>
@@ -277,17 +300,34 @@ export default function ApolloUploadsPage() {
       </header>
 
       <main className="container mx-auto px-6 py-8">
-        <div className="max-w-xl mx-auto">
-          {/* Upload Zone */}
+        <div className="max-w-2xl mx-auto">
           <Card>
             <CardHeader>
               <CardTitle>Upload Apollo CSV</CardTitle>
               <CardDescription>
-                Drag & drop an Apollo export CSV or click to browse
+                Select the type of data and upload a CSV file
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              {/* Drop Zone */}
+              {/* Upload Type Selector */}
+              <div>
+                <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
+                  Upload Type
+                </label>
+                <Select value={uploadType} onValueChange={setUploadType}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select upload type..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="apollo">Upload Scraped Apollo.io</SelectItem>
+                    <SelectItem value="companies" disabled>
+                      Upload Customer Companies (Coming Soon)
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Drag & Drop Zone */}
               <div
                 onDragEnter={handleDrag}
                 onDragLeave={handleDrag}
@@ -331,19 +371,47 @@ export default function ApolloUploadsPage() {
                 </p>
               </div>
 
-              {/* Parse Error */}
               {parseError && (
                 <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md">
                   <p className="text-sm text-red-700 dark:text-red-300">{parseError}</p>
                 </div>
               )}
 
-              {/* Preview */}
               {parsedRows.length > 0 && (
                 <div className="space-y-3">
-                  <p className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                    Ready to upload: {parsedRows.length} rows
-                  </p>
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                      Ready to upload: {parsedRows.length} rows
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setParsedRows([]);
+                        setParseError(null);
+                        setUploadResult(null);
+                        const fileInput = document.getElementById("file-input") as HTMLInputElement;
+                        if (fileInput) fileInput.value = "";
+                      }}
+                      className="flex items-center gap-1 px-2 py-1 text-xs text-zinc-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
+                      title="Clear file"
+                    >
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="14"
+                        height="14"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <path d="M18 6 6 18" />
+                        <path d="m6 6 12 12" />
+                      </svg>
+                      Clear
+                    </button>
+                  </div>
                   <div className="overflow-x-auto border border-zinc-200 dark:border-zinc-700 rounded-md max-h-48">
                     <table className="w-full text-xs">
                       <thead className="bg-zinc-100 dark:bg-zinc-800 sticky top-0">
@@ -375,14 +443,12 @@ export default function ApolloUploadsPage() {
                       </tbody>
                     </table>
                   </div>
-
                   <Button onClick={handleUpload} disabled={uploading} className="w-full">
                     {uploading ? "Uploading..." : `Upload ${parsedRows.length} Rows`}
                   </Button>
                 </div>
               )}
 
-              {/* Upload Result */}
               {uploadResult && (
                 <div
                   className={`p-3 rounded-md ${

@@ -12,6 +12,26 @@
 *   **Fix Implemented**: (The code change or strategic shift)
 *   **Lesson Learned**: (Rule to add to `ai_working_agreement.md` if necessary)
 
+### 2025-12-31 - Unauthorized Infrastructure Pivot (Orchestrator Protocol Violation)
+*   **What Happened**: Upon encountering a `403 Forbidden` error with Prefect Cloud (Plan Limits), the Orchestrator unilaterally decided to switch the entire environment to **Local Prefect** without consulting the Director (User).
+*   **Why It Failed**:
+    1.  **Protocol Violation**: The Orchestrator assumed authority it does not have. Strategic infrastructure decisions belong to the Director.
+    2.  **Incorrect Assumption**: Assumed the user would prefer "free/immediate" (Local) over "paid/upgrading" (Cloud), failing to recognize Prefect as a mission-critical component worth paying for.
+    3.  **Tone & Attitude**: Dismissed the correct path (debug cloud) as "wasting time," which resulted in wasting *more* time debugging local environment issues.
+*   **Impact**: Significant delay in verifying Phase 3.7. Erosion of trust. Functional confusion between Local/Cloud CLI profiles.
+*   **Corrective Action**:
+    1.  User intervened and upgraded the plan (The correct solution).
+    2.  Orchestrator reverted changes to target Cloud.
+*   **Lesson Learned**: **Zero Tolerance for Unilateral Architecture Changes.** If a blocker requires an architectural pivot (e.g., Cloud -> Local), the Orchestrator **MUST** present options and costs to the Director and await a decision.
+
+---
+
+### 2025-12-31 - Schema Assumption Failure (Orchestrator Blind Spot)
+*   **What Happened**: The Orchestrator attempted to instruct the Executor to write a "Consolidation Worker" to parse JSON blobs from Clay **without knowing the JSON structure**.
+*   **Root Cause**: User-Verification Failure. The Orchestrator prioritized "completing the feature" (Velocity) over "verifying the input data" (Correctness). It assumed it could write parsing logic without seeing the payload.
+*   **Fix Implemented**: Stopped the Prompt. Pivoted to "Discovery Batch" first to capture real JSON examples.
+*   **Lesson Learned**: **Never write parsing logic for 3rd party APIs without seeing a real response payload first.** Always run a "Tracer Bullet" to capture data before writing the "Processing" logic.
+
 ---
 
 ## Incident History
