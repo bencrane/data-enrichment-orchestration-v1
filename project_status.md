@@ -158,3 +158,8 @@
     *   Update `src/worker.py` to add `_get_client_config(client_id, workflow_slug)` helper.
     *   Update `start_enrich_company_via_waterfall_in_clay` to use the fetched Webhook URL.
 *   [ ] **Verification**: Launch a batch with a Configured Client and verify it hits the correct Clay Table.
+
+### ⬜ Phase 5: Result Extraction & GTM Dashboard (Immediate Sequel)
+*   [ ] **Extraction Workflow**: Targeted functions (`extract_work_history`, `extract_contact_info`) to project JSONB data into specific Relational Tables for analysis.
+*   [ ] **GTM View Schema**: Define `final_leads` and `work_history` tables optimized for filtering.
+*   [ ] **Work History Analysis**: Feature to trace lead movement across companies.
