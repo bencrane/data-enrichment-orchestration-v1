@@ -1,50 +1,57 @@
 """
 Prefect Deployment Script for Data Enrichment Orchestrator.
 
-Deploys the orchestrator_main flow to Prefect Cloud with a cron schedule.
+Deploys the orchestrator_main flow to Prefect Managed infrastructure.
+This eliminates the need for a local worker - Prefect Cloud runs the flow.
 """
 
-import os
-from dotenv import load_dotenv
 from prefect import flow
-from prefect.client.schemas.schedules import CronSchedule
-
-# Load environment variables
-load_dotenv()
+from prefect.deployments import Deployment
 
 # Import the flow
 from orchestrator import orchestrator_main
 
 
 def deploy():
-    """Deploy the orchestrator flow to Prefect Cloud."""
-    
-    # Get required environment variables to pass to the worker
-    env_vars = {
-        "POSTGRES_CONNECTION_STRING": os.getenv("POSTGRES_CONNECTION_STRING", ""),
-        "MODAL_TOKEN_ID": os.getenv("MODAL_TOKEN_ID", ""),
-        "MODAL_TOKEN_SECRET": os.getenv("MODAL_TOKEN_SECRET", ""),
-    }
-    
-    # Validate required env vars are present
-    if not env_vars["POSTGRES_CONNECTION_STRING"]:
-        raise ValueError("POSTGRES_CONNECTION_STRING must be set in .env")
+    """
+    Deploy the orchestrator flow to Prefect Managed infrastructure.
 
-    # Create deployment with cron schedule (every minute, UTC)
-    # Set working directory to repo root so src/orchestrator.py is accessible
-    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    env_vars["PREFECT_WORKING_DIR"] = repo_root
+    This deployment:
+    - Uses Prefect Managed work pool (serverless, 24/7)
+    - Pulls code from GitHub on each run
+    - Installs dependencies from requirements.txt
+    - Uses Prefect Secret Blocks for credentials (not env vars)
+
+    Prerequisites:
+    1. Create work pool "managed-production" in Prefect Cloud (type: Prefect Managed)
+    2. Create Secret Blocks in Prefect Cloud:
+       - postgres-connection-string
+       - modal-token-id (if needed)
+       - modal-token-secret (if needed)
+    """
 
     deployment = orchestrator_main.to_deployment(
         name="data-enrichment-orchestrator",
-        schedule=CronSchedule(cron="* * * * *", timezone="UTC"),
+        work_pool_name="managed-production",
         tags=["enrichment", "orchestrator", "production"],
-        description="Polls for PENDING workflow_states and dispatches to Modal workers",
+        description="Event-driven orchestrator: polls for PENDING workflow_states and dispatches to Modal workers. Triggered by database INSERT on batches table.",
         parameters={"batch_size": 50},
-        job_variables={
-            "env": env_vars,
-            "working_dir": repo_root,  # Run from repo root
-        },
+        # No schedule - triggered by Edge Function via Prefect API
+        # Pull code from GitHub when running
+        pull=[
+            {
+                "prefect.deployments.steps.git_clone": {
+                    "repository": "https://github.com/bencrane/data-enrichment-orchestration-v1",
+                    "branch": "main",
+                }
+            },
+            {
+                "prefect.deployments.steps.pip_install_requirements": {
+                    "requirements_file": "requirements.txt",
+                }
+            }
+        ],
+        entrypoint="src/orchestrator.py:orchestrator_main",
     )
 
     # Deploy
@@ -55,10 +62,14 @@ def deploy():
     print("=" * 60)
     print(f"Flow: orchestrator_main")
     print(f"Deployment: data-enrichment-orchestrator")
-    print(f"Schedule: Every minute (UTC cron)")
+    print(f"Work Pool: managed-production (Prefect Managed)")
+    print(f"Schedule: None (event-triggered via Edge Function)")
     print(f"Deployment ID: {deployment_id}")
-    print(f"Env vars passed: {list(env_vars.keys())}")
-    print(f"Working dir: {repo_root}")
+    print("=" * 60)
+    print("")
+    print("IMPORTANT: Update your Edge Function with this deployment ID!")
+    print(f"  PREFECT_DEPLOYMENT_ID = {deployment_id}")
+    print("")
     print("=" * 60)
 
     return deployment_id
