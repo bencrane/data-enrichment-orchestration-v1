@@ -114,34 +114,36 @@ export default function ClientDashboard() {
             </Card>
           </Link>
 
-          {/* Customer Companies - Placeholder */}
-          <Card className="cursor-not-allowed opacity-60 h-full">
-            <div className="p-6 flex flex-col items-center justify-center text-center min-h-[160px]">
-              <div className="w-12 h-12 rounded-full bg-emerald-50 dark:bg-emerald-900/20 flex items-center justify-center mb-3">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="24"
-                  height="24"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  className="text-emerald-600 dark:text-emerald-400"
-                >
-                  <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-                  <polyline points="9 22 9 12 15 12 15 22" />
-                </svg>
+          {/* Customer Companies */}
+          <Link href={`/clients/${clientId}/customer-companies`}>
+            <Card className="cursor-pointer hover:border-zinc-400 dark:hover:border-zinc-500 transition-colors h-full">
+              <div className="p-6 flex flex-col items-center justify-center text-center min-h-[160px]">
+                <div className="w-12 h-12 rounded-full bg-emerald-50 dark:bg-emerald-900/20 flex items-center justify-center mb-3">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="24"
+                    height="24"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="text-emerald-600 dark:text-emerald-400"
+                  >
+                    <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+                    <polyline points="9 22 9 12 15 12 15 22" />
+                  </svg>
+                </div>
+                <h3 className="font-semibold text-zinc-900 dark:text-zinc-100">
+                  Customer Companies
+                </h3>
+                <p className="text-sm text-zinc-500 mt-1">
+                  Upload, enrich, and configure
+                </p>
               </div>
-              <h3 className="font-semibold text-zinc-900 dark:text-zinc-100">
-                Customer Companies
-              </h3>
-              <p className="text-sm text-zinc-500 mt-1">
-                Coming soon
-              </p>
-            </div>
-          </Card>
+            </Card>
+          </Link>
         </div>
       </main>
     </div>

@@ -970,3 +970,81 @@ export async function deleteClientWorkflowConfig(
   }
   return { success: true };
 }
+
+// ============ Customer Companies Actions ============
+
+export type CustomerCompanyRow = {
+  company_name: string;
+  domain?: string;
+  company_linkedin_url?: string;
+  [key: string]: string | undefined;
+};
+
+export type CustomerCompanyUpload = {
+  id: string;
+  upload_id: string;
+  uploaded_at: string;
+  row_count: number;
+};
+
+export async function getCustomerCompanyUploads(clientId: string): Promise<CustomerCompanyUpload[]> {
+  const { data, error } = await supabase
+    .from("client_customer_companies")
+    .select("upload_id, created_at")
+    .eq("client_id", clientId)
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    console.error("Error fetching customer company uploads:", error);
+    return [];
+  }
+
+  // Group by upload_id and count rows
+  const uploadMap = new Map<string, { uploaded_at: string; count: number }>();
+  for (const row of data) {
+    const existing = uploadMap.get(row.upload_id);
+    if (existing) {
+      existing.count++;
+    } else {
+      uploadMap.set(row.upload_id, { uploaded_at: row.created_at, count: 1 });
+    }
+  }
+
+  return Array.from(uploadMap.entries()).map(([upload_id, info]) => ({
+    id: upload_id,
+    upload_id,
+    uploaded_at: info.uploaded_at,
+    row_count: info.count,
+  }));
+}
+
+export async function uploadCustomerCompanies(
+  clientId: string,
+  uploadId: string,
+  rows: CustomerCompanyRow[]
+): Promise<{ success: boolean; error?: string; rowCount?: number }> {
+  const records = rows.map((row) => ({
+    client_id: clientId,
+    upload_id: uploadId,
+    company_name: row.company_name,
+    domain: row.domain || null,
+    company_linkedin_url: row.company_linkedin_url || null,
+  }));
+
+  // Insert in batches of 500 to avoid payload limits
+  const BATCH_SIZE = 500;
+  let inserted = 0;
+
+  for (let i = 0; i < records.length; i += BATCH_SIZE) {
+    const batch = records.slice(i, i + BATCH_SIZE);
+    const { error } = await supabase.from("client_customer_companies").insert(batch);
+
+    if (error) {
+      console.error("Error inserting customer companies:", error);
+      return { success: false, error: error.message };
+    }
+    inserted += batch.length;
+  }
+
+  return { success: true, rowCount: inserted };
+}
