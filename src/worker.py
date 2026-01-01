@@ -325,24 +325,32 @@ def start_normalize_company_name(item_id: str):
     image=image,
     secrets=[modal.Secret.from_name("supabase-secrets")],
 )
-def receive_normalized_company_name(item_id: str, payload: dict):
+@modal.web_endpoint(method="POST")
+def receive_normalized_company_name(request: dict):
     """
-    Async Receiver: Receives normalized company name data.
+    Async Receiver: Receives normalized company name data via webhook.
 
     This function:
-    1. Accepts the payload from external service
+    1. Accepts the payload from Clay webhook
     2. Records the enrichment result
     3. Sets state to COMPLETED
+
+    Endpoint URL (after deploy):
+    https://<workspace>--data-enrichment-workers-receive-normalized-company-name.modal.run
     """
+    item_id = request.get("item_id")
+    if not item_id:
+        return {"success": False, "error": "item_id is required"}
+
     step_name = "normalize_company_name"
     print(f"[ASYNC RECEIVER] receive_normalized_company_name called for item={item_id[:8]}...")
 
-    # Record the result
+    # Record the result (full payload from Clay)
     _record_result(item_id, step_name, {
         "action": "normalize_company_name",
         "status": "success",
         "received_at": datetime.now(timezone.utc).isoformat(),
-        **payload,
+        **request,
     })
 
     # Set state to COMPLETED
