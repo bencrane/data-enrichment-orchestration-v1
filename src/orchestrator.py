@@ -13,8 +13,35 @@ from prefect import flow, task, get_run_logger
 from prefect.tasks import task_input_hash
 import modal
 
-# Load environment variables
+# Load environment variables (for local development fallback)
 load_dotenv()
+
+
+def get_postgres_connection_string() -> str:
+    """
+    Get Postgres connection string from Prefect Secret Block or environment variable.
+
+    Priority:
+    1. Prefect Secret Block (production - Prefect Managed)
+    2. Environment variable (local development)
+    """
+    # Try Prefect Secret Block first (for Prefect Managed infrastructure)
+    try:
+        from prefect.blocks.system import Secret
+        secret = Secret.load("postgres-connection-string")
+        return secret.get()
+    except Exception:
+        pass
+
+    # Fall back to environment variable (for local development)
+    conn_string = os.getenv("POSTGRES_CONNECTION_STRING")
+    if conn_string:
+        return conn_string
+
+    raise ValueError(
+        "POSTGRES_CONNECTION_STRING not found. "
+        "Set it as a Prefect Secret Block or environment variable."
+    )
 
 # =============================================================================
 # Database Connection (Sync)
@@ -24,10 +51,7 @@ def get_db_connection():
     """Create a new sync database connection."""
     import psycopg2
 
-    conn_string = os.getenv("POSTGRES_CONNECTION_STRING")
-    if not conn_string:
-        raise ValueError("POSTGRES_CONNECTION_STRING not set")
-
+    conn_string = get_postgres_connection_string()
     return psycopg2.connect(conn_string)
 
 
