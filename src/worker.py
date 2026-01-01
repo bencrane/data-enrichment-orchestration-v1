@@ -292,13 +292,8 @@ def start_normalize_company_name(item_id: str):
         })
         return {"success": False, "item_id": item_id, "error": "BatchItem not found"}
 
-    # Build payload with company data for normalization
-    payload = {
-        "item_id": item_data["item_id"],
-        "company_name": item_data["company_name"],
-        "company_domain": item_data["company_domain"],
-        "company_linkedin_url": item_data["company_linkedin_url"],
-    }
+    # Send all batch_item fields to Clay
+    payload = item_data
 
     print(f"[ASYNC SENDER] Sending to Clay (normalize_company_name): {payload}")
 
@@ -475,12 +470,8 @@ def start_normalize_company_domain(item_id: str):
         })
         return {"success": False, "item_id": item_id, "error": "BatchItem not found"}
 
-    # Build payload with domain data for normalization
-    payload = {
-        "item_id": item_data["item_id"],
-        "company_name": item_data["company_name"],
-        "company_domain": item_data["company_domain"],
-    }
+    # Send all batch_item fields to Clay
+    payload = item_data
 
     print(f"[ASYNC SENDER] Sending to Clay (normalize_company_domain): {payload}")
 
