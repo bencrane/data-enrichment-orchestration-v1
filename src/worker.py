@@ -251,33 +251,79 @@ def run_split_raw_apollo_scrape_data(item_id: str):
 @app.function(
     image=image,
     secrets=[modal.Secret.from_name("supabase-secrets")],
+    concurrency_limit=5,
 )
 def start_normalize_company_name(item_id: str):
     """
-    Async Sender: Initiates company name normalization.
+    Async Sender: Initiates company name normalization via Clay.
 
     This function:
-    1. Logs that we're sending to normalizer
-    2. Sets state to IN_PROGRESS
-    3. DOES NOT call the receiver (strict decoupling)
-
-    In production, this would send a request to an external service
-    that would later call receive_normalized_company_name via webhook.
+    1. Fetches client-specific config (webhook_url)
+    2. Fetches batch_item data for the payload
+    3. POSTs to Clay webhook with company data
+    4. Sets state to IN_PROGRESS
     """
+    import requests
+
     step_name = "normalize_company_name"
     print(f"[ASYNC SENDER] start_normalize_company_name called for item={item_id[:8]}...")
-    print(f"[ASYNC SENDER] Sending to Normalizer...")
+
+    # Fetch client-specific configuration
+    config = _get_client_config(item_id, step_name)
+    webhook_url = config.get("webhook_url") if config else None
+
+    if not webhook_url:
+        print(f"[ASYNC SENDER] ERROR: No webhook_url configured for this client/workflow")
+        _update_state(item_id, step_name, "FAILED", meta={
+            "error": "No webhook_url configured",
+            "failed_at": datetime.now(timezone.utc).isoformat(),
+        })
+        return {"success": False, "item_id": item_id, "error": "No webhook_url configured"}
+
+    print(f"[ASYNC SENDER] Using webhook_url: {webhook_url}")
+
+    # Fetch batch_item data for the payload
+    item_data = _get_batch_item_data(item_id)
+    if not item_data:
+        print(f"[ASYNC SENDER] ERROR: BatchItem {item_id} not found")
+        _update_state(item_id, step_name, "FAILED", meta={
+            "error": "BatchItem not found",
+            "failed_at": datetime.now(timezone.utc).isoformat(),
+        })
+        return {"success": False, "item_id": item_id, "error": "BatchItem not found"}
+
+    # Build payload with company data for normalization
+    payload = {
+        "item_id": item_data["item_id"],
+        "company_name": item_data["company_name"],
+        "company_domain": item_data["company_domain"],
+        "company_linkedin_url": item_data["company_linkedin_url"],
+    }
+
+    print(f"[ASYNC SENDER] Sending to Clay (normalize_company_name): {payload}")
+
+    # POST to Clay webhook
+    try:
+        response = requests.post(webhook_url, json=payload, timeout=30)
+        response.raise_for_status()
+        print(f"[ASYNC SENDER] Clay webhook response: {response.status_code}")
+    except requests.exceptions.RequestException as e:
+        print(f"[ASYNC SENDER] ERROR: Clay webhook failed: {e}")
+        _update_state(item_id, step_name, "FAILED", meta={
+            "error": str(e),
+            "failed_at": datetime.now(timezone.utc).isoformat(),
+        })
+        return {"success": False, "item_id": item_id, "error": str(e)}
 
     # Set state to IN_PROGRESS
     _update_state(item_id, step_name, "IN_PROGRESS", meta={
         "sent_at": datetime.now(timezone.utc).isoformat(),
-        "service": "company_normalizer",
+        "service": "clay",
+        "webhook_url": webhook_url,
+        "payload": payload,
     })
 
-    # DO NOT CALL RECEIVER - strict decoupling
-    # The receiver will be called via webhook/callback from external service
-
-    return {"success": True, "item_id": item_id, "status": "IN_PROGRESS"}
+    return {"success": True, "item_id": item_id, "status": "IN_PROGRESS", "webhook_url": webhook_url}
 
 
 @app.function(
@@ -388,27 +434,78 @@ def receive_person_enrichment_via_clay(item_id: str, payload: dict):
 @app.function(
     image=image,
     secrets=[modal.Secret.from_name("supabase-secrets")],
+    concurrency_limit=5,
 )
 def start_normalize_company_domain(item_id: str):
     """
-    Async Sender: Initiates company domain normalization.
+    Async Sender: Initiates company domain normalization via Clay.
 
     This function:
-    1. Logs that we're sending to domain normalizer
-    2. Sets state to IN_PROGRESS
-    3. DOES NOT call the receiver (strict decoupling)
+    1. Fetches client-specific config (webhook_url)
+    2. Fetches batch_item data for the payload
+    3. POSTs to Clay webhook with domain data
+    4. Sets state to IN_PROGRESS
     """
+    import requests
+
     step_name = "normalize_company_domain"
     print(f"[ASYNC SENDER] start_normalize_company_domain called for item={item_id[:8]}...")
-    print(f"[ASYNC SENDER] Sending to Domain Normalizer...")
+
+    # Fetch client-specific configuration
+    config = _get_client_config(item_id, step_name)
+    webhook_url = config.get("webhook_url") if config else None
+
+    if not webhook_url:
+        print(f"[ASYNC SENDER] ERROR: No webhook_url configured for this client/workflow")
+        _update_state(item_id, step_name, "FAILED", meta={
+            "error": "No webhook_url configured",
+            "failed_at": datetime.now(timezone.utc).isoformat(),
+        })
+        return {"success": False, "item_id": item_id, "error": "No webhook_url configured"}
+
+    print(f"[ASYNC SENDER] Using webhook_url: {webhook_url}")
+
+    # Fetch batch_item data for the payload
+    item_data = _get_batch_item_data(item_id)
+    if not item_data:
+        print(f"[ASYNC SENDER] ERROR: BatchItem {item_id} not found")
+        _update_state(item_id, step_name, "FAILED", meta={
+            "error": "BatchItem not found",
+            "failed_at": datetime.now(timezone.utc).isoformat(),
+        })
+        return {"success": False, "item_id": item_id, "error": "BatchItem not found"}
+
+    # Build payload with domain data for normalization
+    payload = {
+        "item_id": item_data["item_id"],
+        "company_name": item_data["company_name"],
+        "company_domain": item_data["company_domain"],
+    }
+
+    print(f"[ASYNC SENDER] Sending to Clay (normalize_company_domain): {payload}")
+
+    # POST to Clay webhook
+    try:
+        response = requests.post(webhook_url, json=payload, timeout=30)
+        response.raise_for_status()
+        print(f"[ASYNC SENDER] Clay webhook response: {response.status_code}")
+    except requests.exceptions.RequestException as e:
+        print(f"[ASYNC SENDER] ERROR: Clay webhook failed: {e}")
+        _update_state(item_id, step_name, "FAILED", meta={
+            "error": str(e),
+            "failed_at": datetime.now(timezone.utc).isoformat(),
+        })
+        return {"success": False, "item_id": item_id, "error": str(e)}
 
     # Set state to IN_PROGRESS
     _update_state(item_id, step_name, "IN_PROGRESS", meta={
         "sent_at": datetime.now(timezone.utc).isoformat(),
-        "service": "domain_normalizer",
+        "service": "clay",
+        "webhook_url": webhook_url,
+        "payload": payload,
     })
 
-    return {"success": True, "item_id": item_id, "status": "IN_PROGRESS"}
+    return {"success": True, "item_id": item_id, "status": "IN_PROGRESS", "webhook_url": webhook_url}
 
 
 @app.function(
