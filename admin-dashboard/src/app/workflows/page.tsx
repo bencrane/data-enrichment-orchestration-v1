@@ -23,6 +23,8 @@ import {
   updateWorkflow,
   deleteWorkflow,
   EnrichmentWorkflow,
+  getActiveWorkstreams,
+  DataIngestionWorkstream,
 } from "@/app/actions";
 
 function slugify(text: string): string {
@@ -36,6 +38,7 @@ function slugify(text: string): string {
 
 export default function WorkflowsPage() {
   const [workflows, setWorkflows] = useState<EnrichmentWorkflow[]>([]);
+  const [workstreams, setWorkstreams] = useState<DataIngestionWorkstream[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [editingWorkflow, setEditingWorkflow] = useState<EnrichmentWorkflow | null>(null);
@@ -47,18 +50,28 @@ export default function WorkflowsPage() {
   const [description, setDescription] = useState("");
   const [senderFn, setSenderFn] = useState("");
   const [receiverFn, setReceiverFn] = useState("");
+  const [workstreamSlug, setWorkstreamSlug] = useState<string>("global");
   const [error, setError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchWorkflows();
+    fetchData();
   }, []);
 
-  async function fetchWorkflows() {
+  async function fetchData() {
     setLoading(true);
+    const [workflowData, workstreamData] = await Promise.all([
+      getWorkflows(),
+      getActiveWorkstreams(),
+    ]);
+    setWorkflows(workflowData);
+    setWorkstreams(workstreamData);
+    setLoading(false);
+  }
+
+  async function fetchWorkflows() {
     const data = await getWorkflows();
     setWorkflows(data);
-    setLoading(false);
   }
 
   function handleNameChange(value: string) {
@@ -81,6 +94,7 @@ export default function WorkflowsPage() {
     setDescription("");
     setSenderFn("");
     setReceiverFn("");
+    setWorkstreamSlug("global");
     setError(null);
   }
 

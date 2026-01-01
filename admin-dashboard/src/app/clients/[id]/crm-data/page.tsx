@@ -4,20 +4,41 @@ import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { Card } from "@/components/ui/card";
-import { getClientById, Client } from "@/app/actions";
+import {
+  getClientById,
+  getClientPipelines,
+  getClientWorkflowConfigs,
+  Client,
+  EnrichmentPipeline,
+  ClientWorkflowConfig,
+} from "@/app/actions";
+
+const WORKSTREAM_SLUG = "crm_data";
 
 export default function CrmDataPage() {
   const params = useParams();
   const clientId = params.id as string;
 
   const [client, setClient] = useState<Client | null>(null);
+  const [savedPipelines, setSavedPipelines] = useState<EnrichmentPipeline[]>([]);
+  const [clientConfigs, setClientConfigs] = useState<ClientWorkflowConfig[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // TODO: Replace with actual CRM data upload count when backend is ready
+  const uploadsCount = 0;
 
   useEffect(() => {
     async function fetchData() {
       setLoading(true);
-      const clientData = await getClientById(clientId);
+      const [clientData, pipelinesData, configsData] = await Promise.all([
+        getClientById(clientId),
+        getClientPipelines(clientId),
+        getClientWorkflowConfigs(clientId),
+      ]);
       setClient(clientData);
+      // Filter pipelines to only those for this workstream
+      setSavedPipelines(pipelinesData.filter((p) => p.workstream_slug === WORKSTREAM_SLUG));
+      setClientConfigs(configsData);
       setLoading(false);
     }
     fetchData();
@@ -65,10 +86,10 @@ export default function CrmDataPage() {
             </Link>
             <div>
               <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">
-                CRM Data Upload
+                CRM Data
               </h1>
               <p className="text-sm text-zinc-500 dark:text-zinc-400">
-                {client.company_name}
+                {client.company_name} - Upload CRM exports, configure enrichment pipelines, and manage workflow settings
               </p>
             </div>
           </div>
@@ -81,7 +102,7 @@ export default function CrmDataPage() {
           <Link href={`/clients/${clientId}/crm-data/upload`}>
             <Card className="cursor-pointer hover:border-zinc-400 dark:hover:border-zinc-500 transition-colors h-full">
               <div className="p-6 flex flex-col items-center justify-center text-center min-h-[160px]">
-                <div className="w-12 h-12 rounded-full bg-rose-50 dark:bg-rose-900/20 flex items-center justify-center mb-3">
+                <div className="w-12 h-12 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center mb-3">
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
                     width="24"
@@ -92,7 +113,7 @@ export default function CrmDataPage() {
                     strokeWidth="2"
                     strokeLinecap="round"
                     strokeLinejoin="round"
-                    className="text-rose-600 dark:text-rose-400"
+                    className="text-zinc-600 dark:text-zinc-400"
                   >
                     <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
                     <polyline points="17 8 12 3 7 8" />
@@ -103,7 +124,7 @@ export default function CrmDataPage() {
                   Upload Files
                 </h3>
                 <p className="text-sm text-zinc-500 mt-1">
-                  Import CSV data
+                  Upload a new CSV file
                 </p>
               </div>
             </Card>
@@ -135,7 +156,10 @@ export default function CrmDataPage() {
                   Past Uploads
                 </h3>
                 <p className="text-sm text-zinc-500 mt-1">
-                  View upload history
+                  {uploadsCount === 0
+                    ? "No uploads yet"
+                    : `${uploadsCount} upload${uploadsCount !== 1 ? "s" : ""}`
+                  }
                 </p>
               </div>
             </Card>
@@ -145,7 +169,7 @@ export default function CrmDataPage() {
           <Link href={`/clients/${clientId}/crm-data/pipelines`}>
             <Card className="cursor-pointer hover:border-zinc-400 dark:hover:border-zinc-500 transition-colors h-full">
               <div className="p-6 flex flex-col items-center justify-center text-center min-h-[160px]">
-                <div className="w-12 h-12 rounded-full bg-purple-50 dark:bg-purple-900/20 flex items-center justify-center mb-3">
+                <div className="w-12 h-12 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center mb-3">
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
                     width="24"
@@ -156,7 +180,7 @@ export default function CrmDataPage() {
                     strokeWidth="2"
                     strokeLinecap="round"
                     strokeLinejoin="round"
-                    className="text-purple-600 dark:text-purple-400"
+                    className="text-zinc-600 dark:text-zinc-400"
                   >
                     <path d="M8 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3" />
                     <path d="M16 3h3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-3" />
@@ -170,7 +194,10 @@ export default function CrmDataPage() {
                   Enrichment Pipelines
                 </h3>
                 <p className="text-sm text-zinc-500 mt-1">
-                  Configure workflows
+                  {savedPipelines.length === 0
+                    ? "Create workflow sequences"
+                    : `${savedPipelines.length} saved pipeline${savedPipelines.length !== 1 ? "s" : ""}`
+                  }
                 </p>
               </div>
             </Card>
@@ -180,7 +207,7 @@ export default function CrmDataPage() {
           <Link href={`/clients/${clientId}/crm-data/config`}>
             <Card className="cursor-pointer hover:border-zinc-400 dark:hover:border-zinc-500 transition-colors h-full">
               <div className="p-6 flex flex-col items-center justify-center text-center min-h-[160px]">
-                <div className="w-12 h-12 rounded-full bg-orange-50 dark:bg-orange-900/20 flex items-center justify-center mb-3">
+                <div className="w-12 h-12 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center mb-3">
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
                     width="24"
@@ -191,7 +218,7 @@ export default function CrmDataPage() {
                     strokeWidth="2"
                     strokeLinecap="round"
                     strokeLinejoin="round"
-                    className="text-orange-600 dark:text-orange-400"
+                    className="text-zinc-600 dark:text-zinc-400"
                   >
                     <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
                     <circle cx="12" cy="12" r="3" />
@@ -201,7 +228,10 @@ export default function CrmDataPage() {
                   Workflow Configuration
                 </h3>
                 <p className="text-sm text-zinc-500 mt-1">
-                  API keys & webhooks
+                  {clientConfigs.length === 0
+                    ? "Set up webhook URLs & API keys"
+                    : `${clientConfigs.length} workflow${clientConfigs.length !== 1 ? "s" : ""} configured`
+                  }
                 </p>
               </div>
             </Card>

@@ -12,14 +12,23 @@ import {
   CardDescription,
 } from "@/components/ui/card";
 import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import {
   getClientById,
-  getWorkflows,
+  getWorkflowsByWorkstream,
   getClientWorkflowConfigs,
   saveClientWorkflowConfig,
+  getActivePipelineForClient,
   Client,
   EnrichmentWorkflow,
+  EnrichmentPipeline,
   ClientWorkflowConfig,
 } from "@/app/actions";
+
+const WORKSTREAM_SLUG = "customer_companies";
 
 export default function CustomerCompaniesConfigPage() {
   const params = useParams();
@@ -27,8 +36,10 @@ export default function CustomerCompaniesConfigPage() {
 
   const [client, setClient] = useState<Client | null>(null);
   const [workflows, setWorkflows] = useState<EnrichmentWorkflow[]>([]);
+  const [activePipeline, setActivePipeline] = useState<EnrichmentPipeline | null>(null);
   const [clientConfigs, setClientConfigs] = useState<ClientWorkflowConfig[]>([]);
   const [loading, setLoading] = useState(true);
+  const [allWorkflowsOpen, setAllWorkflowsOpen] = useState(false);
 
   // Config editor state
   const [editingWorkflowSlug, setEditingWorkflowSlug] = useState<string | null>(null);
@@ -39,21 +50,32 @@ export default function CustomerCompaniesConfigPage() {
   useEffect(() => {
     async function fetchData() {
       setLoading(true);
-      const [clientData, workflowsData, configsData] = await Promise.all([
+      const [clientData, workflowsData, configsData, pipelineData] = await Promise.all([
         getClientById(clientId),
-        getWorkflows(),
-        getClientWorkflowConfigs(clientId, "customer_companies"),
+        getWorkflowsByWorkstream(WORKSTREAM_SLUG),
+        getClientWorkflowConfigs(clientId),
+        getActivePipelineForClient(WORKSTREAM_SLUG, clientId),
       ]);
       setClient(clientData);
       setWorkflows(workflowsData);
       setClientConfigs(configsData);
+      setActivePipeline(pipelineData);
       setLoading(false);
     }
     fetchData();
   }, [clientId]);
 
-  // Filter to show only ASYNC workflows (they need configuration)
-  const asyncWorkflows = workflows.filter((w) => w.type === "ASYNC");
+  // Get workflows that are in the active pipeline
+  const pipelineWorkflows = activePipeline
+    ? activePipeline.steps
+        .map((slug) => workflows.find((w) => w.slug === slug))
+        .filter((w): w is EnrichmentWorkflow => w !== undefined)
+    : [];
+
+  // Get workflows not in the active pipeline
+  const otherWorkflows = workflows.filter(
+    (w) => !activePipeline?.steps.includes(w.slug)
+  );
 
   function getConfigForWorkflow(workflowSlug: string): ClientWorkflowConfig | undefined {
     return clientConfigs.find((c) => c.workflow_slug === workflowSlug);
@@ -86,10 +108,10 @@ export default function CustomerCompaniesConfigPage() {
     setSavingConfig(true);
     setConfigError(null);
 
-    const result = await saveClientWorkflowConfig(clientId, editingWorkflowSlug, parsed, "customer_companies");
+    const result = await saveClientWorkflowConfig(clientId, editingWorkflowSlug, parsed, WORKSTREAM_SLUG);
 
     if (result.success) {
-      const newConfigs = await getClientWorkflowConfigs(clientId, "customer_companies");
+      const newConfigs = await getClientWorkflowConfigs(clientId);
       setClientConfigs(newConfigs);
       closeConfigEditor();
     } else {
@@ -97,6 +119,91 @@ export default function CustomerCompaniesConfigPage() {
     }
 
     setSavingConfig(false);
+  }
+
+  function renderWorkflowCard(workflow: EnrichmentWorkflow) {
+    const config = getConfigForWorkflow(workflow.slug);
+    const isConfigured = !!config && !!config.config?.webhook_url;
+    const requiresClay = workflow.requires_clay;
+
+    // Determine card styling based on Clay requirement and configuration status
+    const getCardClasses = () => {
+      if (!requiresClay) {
+        // Clay not required - light grey
+        return "border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/50";
+      }
+      if (requiresClay && !isConfigured) {
+        // Clay required but not configured - faint red
+        return "border-red-200 dark:border-red-800 bg-red-50/50 dark:bg-red-900/10";
+      }
+      // Clay required and configured - subtle green border
+      return "border-green-200 dark:border-green-800 bg-white dark:bg-zinc-800";
+    };
+
+    return (
+      <div
+        key={workflow.slug}
+        className={`p-4 border rounded-lg transition-colors ${getCardClasses()}`}
+      >
+        <div className="flex items-start justify-between mb-2">
+          <div className="flex-1 min-w-0">
+            <h4 className="font-medium text-zinc-900 dark:text-zinc-100 text-sm truncate">
+              {workflow.name}
+            </h4>
+            <code className="text-xs text-zinc-400 font-mono">
+              {workflow.slug}
+            </code>
+          </div>
+          <div className="flex items-center gap-2 ml-2">
+            <span
+              className={`px-2 py-0.5 rounded text-xs font-medium ${
+                workflow.type === "SYNC"
+                  ? "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300"
+                  : "bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300"
+              }`}
+            >
+              {workflow.type}
+            </span>
+            {requiresClay && (
+              <span
+                className={`px-2 py-0.5 rounded text-xs font-medium ${
+                  isConfigured
+                    ? "bg-zinc-100 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-300"
+                    : "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300"
+                }`}
+              >
+                {isConfigured ? "Configured" : "Needs Config"}
+              </span>
+            )}
+          </div>
+        </div>
+        {workflow.description && (
+          <p className="text-xs text-zinc-500 mb-3 line-clamp-2">
+            {workflow.description}
+          </p>
+        )}
+        {isConfigured && config?.config && (
+          <div className="mb-3 p-2 bg-zinc-100 dark:bg-zinc-900 rounded text-xs font-mono overflow-hidden">
+            <p className="text-zinc-600 dark:text-zinc-400 truncate">
+              {config.config.webhook_url
+                ? `webhook_url: ${String(config.config.webhook_url).slice(0, 35)}...`
+                : JSON.stringify(config.config).slice(0, 45) + "..."
+              }
+            </p>
+          </div>
+        )}
+        {requiresClay && (
+          <Button
+            onClick={() => openConfigEditor(workflow.slug)}
+            variant="outline"
+            size="sm"
+            className="w-full"
+          >
+            {isConfigured ? "Edit Configuration" : "Add Webhook URL"}
+          </Button>
+        )}
+      </div>
+    );
   }
 
   if (loading) {
@@ -151,85 +258,129 @@ export default function CustomerCompaniesConfigPage() {
         </div>
       </header>
 
-      <main className="container mx-auto px-6 py-8">
+      <main className="container mx-auto px-6 py-8 space-y-6">
+        {/* Active Pipeline Workflows */}
         <Card>
-          <CardHeader>
-            <CardTitle>Workflow Configuration</CardTitle>
-            <CardDescription>
-              Configure webhook URLs and API settings for each workflow
-            </CardDescription>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
+            <div>
+              <CardTitle>Active Pipeline Workflows</CardTitle>
+              {activePipeline ? (
+                <CardDescription>
+                  Pipeline: <span className="font-medium">{activePipeline.name}</span>
+                  {!activePipeline.client_id && (
+                    <span className="ml-2 px-1.5 py-0.5 text-xs bg-zinc-100 dark:bg-zinc-800 rounded">
+                      Inherited Default
+                    </span>
+                  )}
+                </CardDescription>
+              ) : (
+                <CardDescription>No active pipeline configured</CardDescription>
+              )}
+            </div>
+            <Link href={`/clients/${clientId}/customer-companies/pipelines`}>
+              <Button variant="outline" size="sm">
+                Manage Pipelines
+              </Button>
+            </Link>
           </CardHeader>
           <CardContent>
-            {asyncWorkflows.length === 0 ? (
-              <p className="text-sm text-zinc-500 py-8 text-center">
-                No async workflows registered.{" "}
-                <Link href="/workflows" className="text-blue-600 hover:underline">
-                  Create one first
+            {!activePipeline ? (
+              <div className="py-8 text-center">
+                <p className="text-sm text-zinc-500 mb-4">
+                  No active pipeline. Create one to define the workflow sequence.
+                </p>
+                <Link href={`/clients/${clientId}/customer-companies/pipelines`}>
+                  <Button variant="outline" size="sm">
+                    Create Pipeline
+                  </Button>
                 </Link>
+              </div>
+            ) : pipelineWorkflows.length === 0 ? (
+              <p className="text-sm text-zinc-500 py-4 text-center">
+                No workflows found for this pipeline&apos;s steps.
               </p>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {asyncWorkflows.map((workflow) => {
-                  const config = getConfigForWorkflow(workflow.slug);
-                  const isConfigured = !!config;
-                  return (
-                    <div
-                      key={workflow.slug}
-                      className={`p-4 border rounded-lg transition-colors ${
-                        isConfigured
-                          ? "border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-900/10"
-                          : "border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800"
-                      }`}
-                    >
-                      <div className="flex items-start justify-between mb-2">
-                        <div className="flex-1 min-w-0">
-                          <h4 className="font-medium text-zinc-900 dark:text-zinc-100 text-sm truncate">
-                            {workflow.name}
-                          </h4>
-                          <code className="text-xs text-zinc-400 font-mono">
-                            {workflow.slug}
-                          </code>
-                        </div>
+              <>
+                {/* Pipeline flow visualization */}
+                <div className="flex flex-wrap items-center gap-2 p-3 bg-zinc-50 dark:bg-zinc-800/50 rounded-lg border border-zinc-200 dark:border-zinc-700 mb-4">
+                  {activePipeline.steps.map((slug, idx) => {
+                    const workflow = workflows.find((w) => w.slug === slug);
+                    const config = getConfigForWorkflow(slug);
+                    const requiresClay = workflow?.requires_clay ?? false;
+                    const isConfigured = !!config && !!config.config?.webhook_url;
+                    const needsConfig = requiresClay && !isConfigured;
+                    return (
+                      <span key={slug} className="flex items-center">
                         <span
-                          className={`ml-2 px-2 py-0.5 rounded text-xs font-medium ${
-                            isConfigured
-                              ? "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300"
-                              : "bg-zinc-100 text-zinc-500 dark:bg-zinc-700 dark:text-zinc-400"
+                          className={`px-2 py-1 rounded text-xs font-mono ${
+                            needsConfig
+                              ? "bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300"
+                              : "bg-zinc-200 text-zinc-700 dark:bg-zinc-700 dark:text-zinc-300"
                           }`}
                         >
-                          {isConfigured ? "Configured" : "Not Set"}
+                          {slug}
                         </span>
-                      </div>
-                      {workflow.description && (
-                        <p className="text-xs text-zinc-500 mb-3 line-clamp-2">
-                          {workflow.description}
-                        </p>
-                      )}
-                      {isConfigured && config?.config && (
-                        <div className="mb-3 p-2 bg-zinc-100 dark:bg-zinc-900 rounded text-xs font-mono overflow-hidden">
-                          <p className="text-zinc-600 dark:text-zinc-400 truncate">
-                            {config.config.webhook_url
-                              ? `webhook_url: ${String(config.config.webhook_url).slice(0, 30)}...`
-                              : JSON.stringify(config.config).slice(0, 40) + "..."
-                            }
-                          </p>
-                        </div>
-                      )}
-                      <Button
-                        onClick={() => openConfigEditor(workflow.slug)}
-                        variant="outline"
-                        size="sm"
-                        className="w-full"
-                      >
-                        {isConfigured ? "Edit Configuration" : "Configure"}
-                      </Button>
-                    </div>
-                  );
-                })}
-              </div>
+                        {idx < activePipeline.steps.length - 1 && (
+                          <span className="mx-2 text-zinc-400">→</span>
+                        )}
+                      </span>
+                    );
+                  })}
+                </div>
+
+                {/* Workflow cards */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {pipelineWorkflows.map(renderWorkflowCard)}
+                </div>
+              </>
             )}
           </CardContent>
         </Card>
+
+        {/* All Available Workflows (Collapsible) */}
+        <Collapsible open={allWorkflowsOpen} onOpenChange={setAllWorkflowsOpen}>
+          <Card>
+            <CollapsibleTrigger asChild>
+              <CardHeader className="cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle>All Available Workflows</CardTitle>
+                    <CardDescription>
+                      {workflows.length} workflows registered for this workstream
+                    </CardDescription>
+                  </div>
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="20"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className={`text-zinc-400 transition-transform ${allWorkflowsOpen ? "rotate-180" : ""}`}
+                  >
+                    <path d="m6 9 6 6 6-6" />
+                  </svg>
+                </div>
+              </CardHeader>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <CardContent className="pt-0">
+                {workflows.length === 0 ? (
+                  <p className="text-sm text-zinc-500 py-8 text-center">
+                    No workflows registered for this workstream.
+                  </p>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {workflows.map(renderWorkflowCard)}
+                  </div>
+                )}
+              </CardContent>
+            </CollapsibleContent>
+          </Card>
+        </Collapsible>
 
         {/* Config Edit Modal */}
         {editingWorkflowSlug && (

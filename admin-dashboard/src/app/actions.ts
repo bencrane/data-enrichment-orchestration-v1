@@ -517,6 +517,8 @@ export type EnrichmentWorkflow = {
   description: string | null;
   modal_sender_fn: string | null;
   modal_receiver_fn: string | null;
+  workstream_slug: string | null;
+  requires_clay: boolean;
   created_at: string;
 };
 
@@ -527,6 +529,8 @@ export type CreateWorkflowInput = {
   description?: string;
   modal_sender_fn?: string;
   modal_receiver_fn?: string;
+  workstream_slug?: string | null;
+  requires_clay?: boolean;
 };
 
 export async function getWorkflows(): Promise<EnrichmentWorkflow[]> {
@@ -537,6 +541,22 @@ export async function getWorkflows(): Promise<EnrichmentWorkflow[]> {
 
   if (error) {
     console.error("Error fetching workflows:", error);
+    return [];
+  }
+  return data as EnrichmentWorkflow[];
+}
+
+export async function getWorkflowsByWorkstream(
+  workstreamSlug: string
+): Promise<EnrichmentWorkflow[]> {
+  const { data, error } = await supabase
+    .from("enrichment_registry")
+    .select("*")
+    .eq("workstream_slug", workstreamSlug)
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    console.error("Error fetching workflows by workstream:", error);
     return [];
   }
   return data as EnrichmentWorkflow[];
@@ -554,6 +574,8 @@ export async function createWorkflow(
       description: input.description || null,
       modal_sender_fn: input.modal_sender_fn || null,
       modal_receiver_fn: input.modal_receiver_fn || null,
+      workstream_slug: input.workstream_slug || null,
+      requires_clay: input.requires_clay ?? true,
     })
     .select()
     .single();
@@ -569,15 +591,18 @@ export async function updateWorkflow(
   slug: string,
   input: Partial<Omit<CreateWorkflowInput, "slug">>
 ): Promise<{ success: boolean; error?: string; workflow?: EnrichmentWorkflow }> {
+  const updateData: Record<string, unknown> = {};
+  if (input.name !== undefined) updateData.name = input.name;
+  if (input.type !== undefined) updateData.type = input.type;
+  if (input.description !== undefined) updateData.description = input.description || null;
+  if (input.modal_sender_fn !== undefined) updateData.modal_sender_fn = input.modal_sender_fn || null;
+  if (input.modal_receiver_fn !== undefined) updateData.modal_receiver_fn = input.modal_receiver_fn || null;
+  if (input.workstream_slug !== undefined) updateData.workstream_slug = input.workstream_slug;
+  if (input.requires_clay !== undefined) updateData.requires_clay = input.requires_clay;
+
   const { data, error } = await supabase
     .from("enrichment_registry")
-    .update({
-      name: input.name,
-      type: input.type,
-      description: input.description ?? null,
-      modal_sender_fn: input.modal_sender_fn ?? null,
-      modal_receiver_fn: input.modal_receiver_fn ?? null,
-    })
+    .update(updateData)
     .eq("slug", slug)
     .select()
     .single();
@@ -608,10 +633,12 @@ export async function deleteWorkflow(
 
 export type EnrichmentPipeline = {
   id: string;
-  client_id: string;
+  client_id: string | null;
+  workstream_slug: string | null;
   name: string;
   description: string | null;
   steps: string[];
+  is_active: boolean;
   created_at: string;
 };
 
@@ -619,6 +646,7 @@ export type CreatePipelineInput = {
   name: string;
   description?: string;
   steps: string[];
+  is_active?: boolean;
 };
 
 export async function getClientPipelines(clientId: string): Promise<EnrichmentPipeline[]> {
@@ -679,6 +707,7 @@ export async function updatePipeline(
   if (input.name !== undefined) updateData.name = input.name;
   if (input.description !== undefined) updateData.description = input.description || null;
   if (input.steps !== undefined) updateData.steps = input.steps;
+  if (input.is_active !== undefined) updateData.is_active = input.is_active;
 
   const { data, error } = await supabase
     .from("enrichment_pipelines")
@@ -689,6 +718,31 @@ export async function updatePipeline(
 
   if (error) {
     console.error("Error updating pipeline:", error);
+    return { success: false, error: error.message };
+  }
+  return { success: true, pipeline: data as EnrichmentPipeline };
+}
+
+export async function createClientPipelineForWorkstream(
+  clientId: string,
+  workstreamSlug: string,
+  input: CreatePipelineInput
+): Promise<{ success: boolean; error?: string; pipeline?: EnrichmentPipeline }> {
+  const { data, error } = await supabase
+    .from("enrichment_pipelines")
+    .insert({
+      client_id: clientId,
+      workstream_slug: workstreamSlug,
+      name: input.name,
+      description: input.description || null,
+      steps: input.steps,
+      is_active: input.is_active || false,
+    })
+    .select()
+    .single();
+
+  if (error) {
+    console.error("Error creating client pipeline:", error);
     return { success: false, error: error.message };
   }
   return { success: true, pipeline: data as EnrichmentPipeline };
@@ -707,6 +761,119 @@ export async function deletePipeline(
     return { success: false, error: error.message };
   }
   return { success: true };
+}
+
+// ============ Workstream Pipeline Actions ============
+
+export async function getWorkstreamPipelines(
+  workstreamSlug: string
+): Promise<EnrichmentPipeline[]> {
+  const { data, error } = await supabase
+    .from("enrichment_pipelines")
+    .select("*")
+    .eq("workstream_slug", workstreamSlug)
+    .is("client_id", null)
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    console.error("Error fetching workstream pipelines:", error);
+    return [];
+  }
+  return data as EnrichmentPipeline[];
+}
+
+export async function createWorkstreamPipeline(
+  workstreamSlug: string,
+  input: CreatePipelineInput
+): Promise<{ success: boolean; error?: string; pipeline?: EnrichmentPipeline }> {
+  // If this pipeline should be active, deactivate others first
+  if (input.is_active) {
+    await supabase
+      .from("enrichment_pipelines")
+      .update({ is_active: false })
+      .eq("workstream_slug", workstreamSlug)
+      .is("client_id", null);
+  }
+
+  const { data, error } = await supabase
+    .from("enrichment_pipelines")
+    .insert({
+      workstream_slug: workstreamSlug,
+      client_id: null,
+      name: input.name,
+      description: input.description || null,
+      steps: input.steps,
+      is_active: input.is_active || false,
+    })
+    .select()
+    .single();
+
+  if (error) {
+    console.error("Error creating workstream pipeline:", error);
+    return { success: false, error: error.message };
+  }
+  return { success: true, pipeline: data as EnrichmentPipeline };
+}
+
+export async function setActivePipeline(
+  pipelineId: string,
+  workstreamSlug: string,
+  clientId: string | null
+): Promise<{ success: boolean; error?: string }> {
+  // Deactivate all pipelines for this workstream/client combo
+  let deactivateQuery = supabase
+    .from("enrichment_pipelines")
+    .update({ is_active: false })
+    .eq("workstream_slug", workstreamSlug);
+
+  if (clientId) {
+    deactivateQuery = deactivateQuery.eq("client_id", clientId);
+  } else {
+    deactivateQuery = deactivateQuery.is("client_id", null);
+  }
+
+  await deactivateQuery;
+
+  // Activate the selected pipeline
+  const { error } = await supabase
+    .from("enrichment_pipelines")
+    .update({ is_active: true })
+    .eq("id", pipelineId);
+
+  if (error) {
+    console.error("Error setting active pipeline:", error);
+    return { success: false, error: error.message };
+  }
+  return { success: true };
+}
+
+export async function getActivePipelineForClient(
+  workstreamSlug: string,
+  clientId: string
+): Promise<EnrichmentPipeline | null> {
+  // First check for client-specific active pipeline
+  const { data: clientPipeline } = await supabase
+    .from("enrichment_pipelines")
+    .select("*")
+    .eq("workstream_slug", workstreamSlug)
+    .eq("client_id", clientId)
+    .eq("is_active", true)
+    .single();
+
+  if (clientPipeline) {
+    return clientPipeline as EnrichmentPipeline;
+  }
+
+  // Fall back to workstream default
+  const { data: workstreamPipeline } = await supabase
+    .from("enrichment_pipelines")
+    .select("*")
+    .eq("workstream_slug", workstreamSlug)
+    .is("client_id", null)
+    .eq("is_active", true)
+    .single();
+
+  return workstreamPipeline as EnrichmentPipeline | null;
 }
 
 // ============ Upload Inspector Actions ============
@@ -882,6 +1049,7 @@ export type ClientWorkflowConfig = {
   id: string;
   client_id: string;
   workflow_slug: string;
+  workstream_slug: string;
   config: Record<string, unknown>;
   created_at: string;
   updated_at: string;
@@ -928,20 +1096,22 @@ export async function getClientWorkflowConfigs(
 export async function saveClientWorkflowConfig(
   clientId: string,
   workflowSlug: string,
-  config: Record<string, unknown>
+  config: Record<string, unknown>,
+  workstreamSlug: string
 ): Promise<{ success: boolean; error?: string; config?: ClientWorkflowConfig }> {
-  // Use upsert to handle the unique constraint (client_id, workflow_slug)
+  // Use upsert to handle the unique constraint (client_id, workflow_slug, workstream_slug)
   const { data, error } = await supabase
     .from("client_workflow_configs")
     .upsert(
       {
         client_id: clientId,
         workflow_slug: workflowSlug,
+        workstream_slug: workstreamSlug,
         config: config,
         updated_at: new Date().toISOString(),
       },
       {
-        onConflict: "client_id,workflow_slug",
+        onConflict: "client_id,workflow_slug,workstream_slug",
       }
     )
     .select()
@@ -1251,4 +1421,213 @@ export async function uploadCrmData(
   }
 
   return { success: true, rowCount: inserted };
+}
+
+// ============ CRM Data Normalized Tables ============
+
+export type CrmNormalizedCompanyRow = {
+  company_name?: string;
+  domain?: string;
+  company_linkedin_url?: string;
+};
+
+export type CrmNormalizedPersonRow = {
+  company_name?: string;
+  domain?: string;
+  company_linkedin_url?: string;
+  first_name?: string;
+  last_name?: string;
+  full_name?: string;
+  person_linkedin_url?: string;
+  email?: string;
+  mobile_phone?: string;
+};
+
+export type CrmDataFileType = "companies" | "people";
+
+export async function uploadCrmNormalizedCompanies(
+  clientId: string,
+  uploadId: string,
+  rows: CrmNormalizedCompanyRow[]
+): Promise<{ success: boolean; error?: string; rowCount?: number }> {
+  const records = rows.map((row) => ({
+    client_id: clientId,
+    upload_id: uploadId,
+    company_name: row.company_name || null,
+    domain: row.domain || null,
+    company_linkedin_url: row.company_linkedin_url || null,
+  }));
+
+  // Insert in batches of 500 to avoid payload limits
+  const BATCH_SIZE = 500;
+  let inserted = 0;
+
+  for (let i = 0; i < records.length; i += BATCH_SIZE) {
+    const batch = records.slice(i, i + BATCH_SIZE);
+    const { error } = await supabase.from("crm_data_normalized_companies").insert(batch);
+
+    if (error) {
+      console.error("Error inserting CRM normalized companies:", error);
+      return { success: false, error: error.message };
+    }
+    inserted += batch.length;
+  }
+
+  return { success: true, rowCount: inserted };
+}
+
+export async function uploadCrmNormalizedPeople(
+  clientId: string,
+  uploadId: string,
+  rows: CrmNormalizedPersonRow[]
+): Promise<{ success: boolean; error?: string; rowCount?: number }> {
+  const records = rows.map((row) => ({
+    client_id: clientId,
+    upload_id: uploadId,
+    company_name: row.company_name || null,
+    domain: row.domain || null,
+    company_linkedin_url: row.company_linkedin_url || null,
+    first_name: row.first_name || null,
+    last_name: row.last_name || null,
+    full_name: row.full_name || null,
+    person_linkedin_url: row.person_linkedin_url || null,
+    email: row.email || null,
+    mobile_phone: row.mobile_phone || null,
+  }));
+
+  // Insert in batches of 500 to avoid payload limits
+  const BATCH_SIZE = 500;
+  let inserted = 0;
+
+  for (let i = 0; i < records.length; i += BATCH_SIZE) {
+    const batch = records.slice(i, i + BATCH_SIZE);
+    const { error } = await supabase.from("crm_data_normalized_people").insert(batch);
+
+    if (error) {
+      console.error("Error inserting CRM normalized people:", error);
+      return { success: false, error: error.message };
+    }
+    inserted += batch.length;
+  }
+
+  return { success: true, rowCount: inserted };
+}
+
+// ============ Data Ingestion Workstreams Actions ============
+
+export type DataIngestionWorkstream = {
+  slug: string;
+  name: string;
+  description: string | null;
+  icon: string | null;
+  color: string | null;
+  table_name: string | null;
+  route_path: string | null;
+  is_active: boolean;
+  created_at: string;
+};
+
+export type CreateWorkstreamInput = {
+  slug: string;
+  name: string;
+  description?: string;
+  icon?: string;
+  color?: string;
+  table_name?: string;
+  route_path?: string;
+  is_active?: boolean;
+};
+
+export async function getDataIngestionWorkstreams(): Promise<DataIngestionWorkstream[]> {
+  const { data, error } = await supabase
+    .from("data_ingestion_workstreams")
+    .select("*")
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    console.error("Error fetching workstreams:", error);
+    return [];
+  }
+  return data as DataIngestionWorkstream[];
+}
+
+export async function getActiveWorkstreams(): Promise<DataIngestionWorkstream[]> {
+  const { data, error } = await supabase
+    .from("data_ingestion_workstreams")
+    .select("*")
+    .eq("is_active", true)
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    console.error("Error fetching active workstreams:", error);
+    return [];
+  }
+  return data as DataIngestionWorkstream[];
+}
+
+export async function createDataIngestionWorkstream(
+  input: CreateWorkstreamInput
+): Promise<{ success: boolean; error?: string; workstream?: DataIngestionWorkstream }> {
+  const { data, error } = await supabase
+    .from("data_ingestion_workstreams")
+    .insert({
+      slug: input.slug,
+      name: input.name,
+      description: input.description || null,
+      icon: input.icon || null,
+      color: input.color || null,
+      table_name: input.table_name || null,
+      route_path: input.route_path || null,
+      is_active: input.is_active ?? true,
+    })
+    .select()
+    .single();
+
+  if (error) {
+    console.error("Error creating workstream:", error);
+    return { success: false, error: error.message };
+  }
+  return { success: true, workstream: data as DataIngestionWorkstream };
+}
+
+export async function updateDataIngestionWorkstream(
+  slug: string,
+  input: Partial<Omit<CreateWorkstreamInput, "slug">>
+): Promise<{ success: boolean; error?: string; workstream?: DataIngestionWorkstream }> {
+  const updateData: Record<string, unknown> = {};
+  if (input.name !== undefined) updateData.name = input.name;
+  if (input.description !== undefined) updateData.description = input.description || null;
+  if (input.icon !== undefined) updateData.icon = input.icon || null;
+  if (input.color !== undefined) updateData.color = input.color || null;
+  if (input.table_name !== undefined) updateData.table_name = input.table_name || null;
+  if (input.route_path !== undefined) updateData.route_path = input.route_path || null;
+  if (input.is_active !== undefined) updateData.is_active = input.is_active;
+
+  const { data, error } = await supabase
+    .from("data_ingestion_workstreams")
+    .update(updateData)
+    .eq("slug", slug)
+    .select()
+    .single();
+
+  if (error) {
+    console.error("Error updating workstream:", error);
+    return { success: false, error: error.message };
+  }
+  return { success: true, workstream: data as DataIngestionWorkstream };
+}
+
+export async function deleteDataIngestionWorkstream(
+  slug: string
+): Promise<{ success: boolean; error?: string }> {
+  const { error } = await supabase
+    .from("data_ingestion_workstreams")
+    .delete()
+    .eq("slug", slug);
+
+  if (error) {
+    console.error("Error deleting workstream:", error);
+    return { success: false, error: error.message };
+  }
+  return { success: true };
 }

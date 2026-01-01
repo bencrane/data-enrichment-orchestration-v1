@@ -22,9 +22,37 @@ export default function Home() {
 
       <main className="container mx-auto px-6 py-8">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {/* Admin */}
+          <Link href="/admin">
+            <Card className="cursor-pointer transition-all hover:shadow-lg hover:border-zinc-400 dark:hover:border-zinc-600 h-full">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="20"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+                    <circle cx="12" cy="12" r="3" />
+                  </svg>
+                  Admin
+                </CardTitle>
+                <CardDescription>
+                  System administration and database tools
+                </CardDescription>
+              </CardHeader>
+            </Card>
+          </Link>
+
           {/* Client Manager */}
           <Link href="/clients">
-            <Card className="cursor-pointer transition-all hover:shadow-lg hover:border-zinc-400 dark:hover:border-zinc-600">
+            <Card className="cursor-pointer transition-all hover:shadow-lg hover:border-zinc-400 dark:hover:border-zinc-600 h-full">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <svg
@@ -52,9 +80,9 @@ export default function Home() {
             </Card>
           </Link>
 
-          {/* Workflow Registry */}
-          <Link href="/workflows">
-            <Card className="cursor-pointer transition-all hover:shadow-lg hover:border-zinc-400 dark:hover:border-zinc-600">
+          {/* Observability */}
+          <Link href="/observability">
+            <Card className="cursor-pointer transition-all hover:shadow-lg hover:border-zinc-400 dark:hover:border-zinc-600 h-full">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <svg
@@ -68,107 +96,20 @@ export default function Home() {
                     strokeLinecap="round"
                     strokeLinejoin="round"
                   >
-                    <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
-                    <polyline points="14 2 14 8 20 8" />
-                    <path d="m9 15 2 2 4-4" />
+                    <path d="M3 3v18h18" />
+                    <path d="m19 9-5 5-4-4-3 3" />
                   </svg>
-                  Workflow Registry
+                  Observability
                 </CardTitle>
                 <CardDescription>
-                  Register and manage enrichment workflows
+                  Monitor batches and workflow states
                 </CardDescription>
               </CardHeader>
             </Card>
           </Link>
-
-          {/* Schema Viewer */}
-          <Link href="/schema">
-            <Card className="cursor-pointer transition-all hover:shadow-lg hover:border-zinc-400 dark:hover:border-zinc-600">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    width="20"
-                    height="20"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <ellipse cx="12" cy="5" rx="9" ry="3" />
-                    <path d="M3 5V19A9 3 0 0 0 21 19V5" />
-                    <path d="M3 12A9 3 0 0 0 21 12" />
-                  </svg>
-                  Table Schema Viewer
-                </CardTitle>
-                <CardDescription>
-                  View column definitions and data types for all database tables
-                </CardDescription>
-              </CardHeader>
-            </Card>
-          </Link>
-
-          {/* Batch Monitor - Coming Soon */}
-          <Card className="opacity-50 cursor-not-allowed">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="20"
-                  height="20"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <path d="M12 3v18" />
-                  <rect width="18" height="18" x="3" y="3" rx="2" />
-                  <path d="M3 9h18" />
-                  <path d="M3 15h18" />
-                </svg>
-                Batch Monitor
-              </CardTitle>
-              <CardDescription>
-                View and manage batch processing status (Coming Soon)
-              </CardDescription>
-            </CardHeader>
-          </Card>
-
-          {/* Workflow States - Coming Soon */}
-          <Card className="opacity-50 cursor-not-allowed">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="20"
-                  height="20"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
-                  <polyline points="14 2 14 8 20 8" />
-                  <line x1="16" x2="8" y1="13" y2="13" />
-                  <line x1="16" x2="8" y1="17" y2="17" />
-                  <line x1="10" x2="8" y1="9" y2="9" />
-                </svg>
-                Workflow States
-              </CardTitle>
-              <CardDescription>
-                Inspect workflow state transitions (Coming Soon)
-              </CardDescription>
-            </CardHeader>
-          </Card>
 
           {/* Global Ingest - Coming Soon */}
-          <Card className="opacity-50 cursor-not-allowed">
+          <Card className="opacity-50 cursor-not-allowed h-full">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <svg

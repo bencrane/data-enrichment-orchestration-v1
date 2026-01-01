@@ -14,13 +14,16 @@ import {
 import {
   getClientById,
   getUploadDetails,
-  getClientPipelines,
+  getActivePipelineForClient,
   startBatchFromUpload,
   startBatchFromSelectedRows,
   Client,
   UploadDetails,
   EnrichmentPipeline,
 } from "@/app/actions";
+
+// Workstream slug for apollo uploads
+const WORKSTREAM_SLUG = "apollo_scrape";
 
 const PAGE_SIZE = 25;
 
@@ -32,7 +35,7 @@ export default function UploadInspectorPage() {
 
   const [client, setClient] = useState<Client | null>(null);
   const [upload, setUpload] = useState<UploadDetails | null>(null);
-  const [pipelines, setPipelines] = useState<EnrichmentPipeline[]>([]);
+  const [activePipeline, setActivePipeline] = useState<EnrichmentPipeline | null>(null);
   const [loading, setLoading] = useState(true);
 
   // Selection state
@@ -43,21 +46,20 @@ export default function UploadInspectorPage() {
 
   // Launch modal state
   const [showLaunchModal, setShowLaunchModal] = useState(false);
-  const [selectedPipelineId, setSelectedPipelineId] = useState<string | null>(null);
   const [launching, setLaunching] = useState(false);
   const [launchError, setLaunchError] = useState<string | null>(null);
 
   useEffect(() => {
     async function fetchData() {
       setLoading(true);
-      const [clientData, uploadData, pipelinesData] = await Promise.all([
+      const [clientData, uploadData, pipelineData] = await Promise.all([
         getClientById(clientId),
         getUploadDetails(clientId, uploadId, 500), // Fetch more rows for pagination
-        getClientPipelines(clientId),
+        getActivePipelineForClient(WORKSTREAM_SLUG, clientId),
       ]);
       setClient(clientData);
       setUpload(uploadData);
-      setPipelines(pipelinesData);
+      setActivePipeline(pipelineData);
       setLoading(false);
     }
     fetchData();
@@ -117,14 +119,9 @@ export default function UploadInspectorPage() {
     setSelectedRowIds(new Set());
   }
 
-  // Get selected pipeline
-  const selectedPipeline = selectedPipelineId
-    ? pipelines.find((p) => p.id === selectedPipelineId)
-    : null;
-
   async function handleLaunchBatch() {
-    if (!selectedPipeline) {
-      setLaunchError("Please select a pipeline");
+    if (!activePipeline) {
+      setLaunchError("No active pipeline configured");
       return;
     }
 
@@ -138,11 +135,11 @@ export default function UploadInspectorPage() {
         clientId,
         uploadId,
         Array.from(selectedRowIds),
-        selectedPipeline.steps
+        activePipeline.steps
       );
     } else {
       // Launch with all rows
-      result = await startBatchFromUpload(clientId, uploadId, selectedPipeline.steps);
+      result = await startBatchFromUpload(clientId, uploadId, activePipeline.steps);
     }
 
     if (result.success) {
@@ -448,7 +445,7 @@ export default function UploadInspectorPage() {
         )}
       </main>
 
-      {/* Launch Batch Modal - Pipeline Selector */}
+      {/* Launch Batch Modal - Shows Active Pipeline */}
       {showLaunchModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <Card className="w-full max-w-lg">
@@ -456,8 +453,8 @@ export default function UploadInspectorPage() {
               <CardTitle>Launch Enrichment Batch</CardTitle>
               <CardDescription>
                 {selectedRowIds.size > 0
-                  ? `Select a pipeline for ${selectedRowIds.size} selected rows`
-                  : `Select a pipeline for all ${upload.row_count} rows`}
+                  ? `Run pipeline on ${selectedRowIds.size} selected rows`
+                  : `Run pipeline on all ${upload.row_count} rows`}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -470,7 +467,7 @@ export default function UploadInspectorPage() {
                 </div>
               )}
 
-              {pipelines.length === 0 ? (
+              {!activePipeline ? (
                 <div className="py-8 text-center">
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
@@ -487,89 +484,46 @@ export default function UploadInspectorPage() {
                     <path d="M3 12h4l3 9 4-18 3 9h4" />
                   </svg>
                   <p className="text-sm text-zinc-500 mb-4">
-                    No pipelines configured for this client.
+                    No active pipeline configured for this workstream.
                   </p>
-                  <Link href={`/clients/${clientId}`}>
+                  <Link href={`/clients/${clientId}/apollo-ingest/pipelines`}>
                     <Button variant="outline" size="sm">
-                      Create Pipeline First
+                      Configure Pipeline
                     </Button>
                   </Link>
                 </div>
               ) : (
                 <>
-                  {/* Pipeline Selector */}
+                  {/* Active Pipeline Display */}
                   <div>
                     <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
-                      Select Pipeline
+                      Active Pipeline
                     </label>
-                    <div className="space-y-2 max-h-[300px] overflow-y-auto">
-                      {pipelines.map((pipeline) => (
-                        <button
-                          key={pipeline.id}
-                          onClick={() => setSelectedPipelineId(pipeline.id)}
-                          className={`w-full text-left p-4 rounded-md border transition-colors ${
-                            selectedPipelineId === pipeline.id
-                              ? "border-purple-500 bg-purple-50 dark:bg-purple-900/20"
-                              : "border-zinc-200 dark:border-zinc-700 hover:border-zinc-400 dark:hover:border-zinc-500"
-                          }`}
-                        >
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="font-medium text-zinc-900 dark:text-zinc-100">
-                              {pipeline.name}
-                            </span>
-                            {selectedPipelineId === pipeline.id && (
-                              <svg
-                                xmlns="http://www.w3.org/2000/svg"
-                                width="16"
-                                height="16"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="2"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                className="text-purple-600"
-                              >
-                                <path d="M20 6 9 17l-5-5" />
-                              </svg>
-                            )}
-                          </div>
-                          {pipeline.description && (
-                            <p className="text-xs text-zinc-500 mb-2">
-                              {pipeline.description}
-                            </p>
-                          )}
-                          <div className="flex items-center gap-1 flex-wrap">
-                            {pipeline.steps.map((step, i) => (
-                              <span
-                                key={i}
-                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-mono bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400"
-                              >
-                                <span className="text-purple-600 dark:text-purple-400 font-bold">{i + 1}</span>
-                                {step}
-                              </span>
-                            ))}
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Selected Pipeline Preview */}
-                  {selectedPipeline && (
-                    <div className="p-3 bg-zinc-50 dark:bg-zinc-800 rounded-md">
-                      <p className="text-xs text-zinc-500 mb-1">Pipeline Steps</p>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        {selectedPipeline.steps.map((step, i) => (
+                    <div className="p-4 rounded-md border border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-900/10">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="font-medium text-zinc-900 dark:text-zinc-100">
+                          {activePipeline.name}
+                        </span>
+                        <span className="px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300">
+                          Active
+                        </span>
+                      </div>
+                      {activePipeline.description && (
+                        <p className="text-xs text-zinc-500 mb-3">
+                          {activePipeline.description}
+                        </p>
+                      )}
+                      <div className="flex items-center gap-1 flex-wrap">
+                        {activePipeline.steps.map((step, i) => (
                           <span key={i} className="inline-flex items-center">
-                            <span className="px-2 py-1 rounded text-sm font-mono bg-white dark:bg-zinc-700 border border-zinc-200 dark:border-zinc-600 text-zinc-700 dark:text-zinc-300">
+                            <span className="px-2 py-1 rounded text-xs font-mono bg-white dark:bg-zinc-700 border border-zinc-200 dark:border-zinc-600 text-zinc-700 dark:text-zinc-300">
                               {step}
                             </span>
-                            {i < selectedPipeline.steps.length - 1 && (
+                            {i < activePipeline.steps.length - 1 && (
                               <svg
                                 xmlns="http://www.w3.org/2000/svg"
-                                width="16"
-                                height="16"
+                                width="14"
+                                height="14"
                                 viewBox="0 0 24 24"
                                 fill="none"
                                 stroke="currentColor"
@@ -585,7 +539,7 @@ export default function UploadInspectorPage() {
                         ))}
                       </div>
                     </div>
-                  )}
+                  </div>
                 </>
               )}
 
@@ -598,7 +552,7 @@ export default function UploadInspectorPage() {
               <div className="flex gap-3 pt-2">
                 <Button
                   onClick={handleLaunchBatch}
-                  disabled={launching || !selectedPipelineId}
+                  disabled={launching || !activePipeline}
                   className="flex-1"
                 >
                   {launching
@@ -611,7 +565,6 @@ export default function UploadInspectorPage() {
                   onClick={() => {
                     setShowLaunchModal(false);
                     setLaunchError(null);
-                    setSelectedPipelineId(null);
                   }}
                 >
                   Cancel

@@ -12,16 +12,25 @@ import {
   CardDescription,
 } from "@/components/ui/card";
 import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import {
   getClientById,
-  getWorkflows,
+  getWorkflowsByWorkstream,
   getClientPipelines,
-  createPipeline,
+  getWorkstreamPipelines,
+  createClientPipelineForWorkstream,
   updatePipeline,
   deletePipeline,
+  setActivePipeline,
   Client,
   EnrichmentWorkflow,
   EnrichmentPipeline,
 } from "@/app/actions";
+
+const WORKSTREAM_SLUG = "customer_companies";
 
 export default function CustomerCompaniesPipelinesPage() {
   const params = useParams();
@@ -30,6 +39,7 @@ export default function CustomerCompaniesPipelinesPage() {
   const [client, setClient] = useState<Client | null>(null);
   const [workflows, setWorkflows] = useState<EnrichmentWorkflow[]>([]);
   const [savedPipelines, setSavedPipelines] = useState<EnrichmentPipeline[]>([]);
+  const [workstreamDefaultPipeline, setWorkstreamDefaultPipeline] = useState<EnrichmentPipeline | null>(null);
   const [loading, setLoading] = useState(true);
 
   // Pipeline builder state
@@ -39,22 +49,39 @@ export default function CustomerCompaniesPipelinesPage() {
   const [editingPipelineId, setEditingPipelineId] = useState<string | null>(null);
   const [savingPipeline, setSavingPipeline] = useState(false);
   const [pipelineError, setPipelineError] = useState<string | null>(null);
+  const [builderOpen, setBuilderOpen] = useState(false);
 
   useEffect(() => {
     async function fetchData() {
       setLoading(true);
-      const [clientData, workflowsData, pipelinesData] = await Promise.all([
+      const [clientData, workflowsData, pipelinesData, workstreamPipelines] = await Promise.all([
         getClientById(clientId),
-        getWorkflows(),
-        getClientPipelines(clientId, "customer_companies"),
+        getWorkflowsByWorkstream(WORKSTREAM_SLUG),
+        getClientPipelines(clientId),
+        getWorkstreamPipelines(WORKSTREAM_SLUG),
       ]);
       setClient(clientData);
       setWorkflows(workflowsData);
-      setSavedPipelines(pipelinesData);
+
+      // Filter client pipelines to only those for this workstream
+      const clientWorkstreamPipelines = pipelinesData.filter(
+        (p) => p.workstream_slug === WORKSTREAM_SLUG
+      );
+      setSavedPipelines(clientWorkstreamPipelines);
+
+      // Find the active workstream default pipeline
+      const defaultPipeline = workstreamPipelines.find((p) => p.is_active);
+      setWorkstreamDefaultPipeline(defaultPipeline || null);
+
       setLoading(false);
     }
     fetchData();
   }, [clientId]);
+
+  // Determine which pipeline is active for this client
+  const clientActivePipeline = savedPipelines.find((p) => p.is_active);
+  const effectivePipeline = clientActivePipeline || workstreamDefaultPipeline;
+  const isUsingInheritedDefault = !clientActivePipeline && !!workstreamDefaultPipeline;
 
   function addWorkflowToPipeline(slug: string) {
     if (pipeline.includes(slug)) return;
@@ -107,21 +134,21 @@ export default function CustomerCompaniesPipelinesPage() {
         steps: pipeline,
       });
       if (result.success) {
-        const newPipelines = await getClientPipelines(clientId, "customer_companies");
-        setSavedPipelines(newPipelines);
+        const newPipelines = await getClientPipelines(clientId);
+        setSavedPipelines(newPipelines.filter((p) => p.workstream_slug === WORKSTREAM_SLUG));
         resetPipelineForm();
       } else {
         setPipelineError(result.error || "Failed to update pipeline");
       }
     } else {
-      const result = await createPipeline(clientId, {
+      const result = await createClientPipelineForWorkstream(clientId, WORKSTREAM_SLUG, {
         name: pipelineName.trim(),
         description: pipelineDescription.trim() || undefined,
         steps: pipeline,
-      }, "customer_companies");
+      });
       if (result.success) {
-        const newPipelines = await getClientPipelines(clientId, "customer_companies");
-        setSavedPipelines(newPipelines);
+        const newPipelines = await getClientPipelines(clientId);
+        setSavedPipelines(newPipelines.filter((p) => p.workstream_slug === WORKSTREAM_SLUG));
         resetPipelineForm();
       } else {
         setPipelineError(result.error || "Failed to save pipeline");
@@ -137,6 +164,7 @@ export default function CustomerCompaniesPipelinesPage() {
     setPipelineDescription(pipelineData.description || "");
     setEditingPipelineId(pipelineData.id);
     setPipelineError(null);
+    setBuilderOpen(true);
   }
 
   function resetPipelineForm() {
@@ -145,6 +173,7 @@ export default function CustomerCompaniesPipelinesPage() {
     setPipelineDescription("");
     setEditingPipelineId(null);
     setPipelineError(null);
+    setBuilderOpen(false);
   }
 
   async function handleDeletePipeline(pipelineId: string) {
@@ -152,12 +181,31 @@ export default function CustomerCompaniesPipelinesPage() {
 
     const result = await deletePipeline(pipelineId);
     if (result.success) {
-      const newPipelines = await getClientPipelines(clientId, "customer_companies");
-      setSavedPipelines(newPipelines);
+      const newPipelines = await getClientPipelines(clientId);
+      setSavedPipelines(newPipelines.filter((p) => p.workstream_slug === WORKSTREAM_SLUG));
       if (editingPipelineId === pipelineId) {
         resetPipelineForm();
       }
     }
+  }
+
+  async function handleSetActivePipeline(pipelineId: string) {
+    const result = await setActivePipeline(pipelineId, WORKSTREAM_SLUG, clientId);
+    if (result.success) {
+      const newPipelines = await getClientPipelines(clientId);
+      setSavedPipelines(newPipelines.filter((p) => p.workstream_slug === WORKSTREAM_SLUG));
+    }
+  }
+
+  async function handleUseInheritedDefault() {
+    // Deactivate all client pipelines for this workstream
+    for (const p of savedPipelines) {
+      if (p.is_active) {
+        await updatePipeline(p.id, { is_active: false });
+      }
+    }
+    const newPipelines = await getClientPipelines(clientId);
+    setSavedPipelines(newPipelines.filter((p) => p.workstream_slug === WORKSTREAM_SLUG));
   }
 
   if (loading) {
@@ -205,27 +253,76 @@ export default function CustomerCompaniesPipelinesPage() {
                 Enrichment Pipelines
               </h1>
               <p className="text-sm text-zinc-500 dark:text-zinc-400">
-                {client.company_name} - Define and save workflow sequences for Customer Companies
+                {client.company_name} - Customer Companies workstream
               </p>
             </div>
           </div>
         </div>
       </header>
 
-      <main className="container mx-auto px-6 py-8">
+      <main className="container mx-auto px-6 py-8 space-y-6">
+        {/* Active Pipeline Section */}
         <Card>
           <CardHeader>
-            <CardTitle>{editingPipelineId ? "Edit Pipeline" : "Create Pipeline"}</CardTitle>
+            <CardTitle className="text-base">Active Pipeline</CardTitle>
             <CardDescription>
-              Define and save workflow sequences for Customer Companies enrichment
+              Used when processing batches for {client.company_name}
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {/* Saved Pipelines List */}
+            {effectivePipeline ? (
+              <div className="p-4 border border-zinc-200 dark:border-zinc-700 rounded-lg bg-white dark:bg-zinc-800">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-zinc-900 dark:text-zinc-100">
+                        {effectivePipeline.name}
+                      </span>
+                      <span className="text-xs text-zinc-500">
+                        ({isUsingInheritedDefault ? "default" : "custom"})
+                      </span>
+                    </div>
+                    {effectivePipeline.description && (
+                      <p className="text-sm text-zinc-500 mt-1">{effectivePipeline.description}</p>
+                    )}
+                    <p className="text-sm text-zinc-500 mt-2">
+                      {effectivePipeline.steps.join(" → ")}
+                    </p>
+                  </div>
+                  {!isUsingInheritedDefault && workstreamDefaultPipeline && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleUseInheritedDefault}
+                    >
+                      Use Default
+                    </Button>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm text-zinc-500">
+                No active pipeline configured.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+
+
+        {/* Client Custom Pipelines */}
+        <Card>
+          <CardHeader>
+            <CardTitle>{editingPipelineId ? "Edit Pipeline" : "Custom Pipelines"}</CardTitle>
+            <CardDescription>
+              Create custom pipelines for this client to override the workstream default
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {/* Saved Client Pipelines List */}
             {savedPipelines.length > 0 && !editingPipelineId && (
               <div className="mb-6">
                 <h4 className="text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-3">
-                  Saved Pipelines
+                  Client Pipelines
                 </h4>
                 <div className="space-y-2 max-h-[200px] overflow-y-auto">
                   {savedPipelines.map((p) => (
@@ -234,14 +331,30 @@ export default function CustomerCompaniesPipelinesPage() {
                       className="flex items-center justify-between p-3 border border-zinc-200 dark:border-zinc-700 rounded-md bg-white dark:bg-zinc-800"
                     >
                       <div className="flex-1 min-w-0">
-                        <p className="font-medium text-zinc-900 dark:text-zinc-100 text-sm truncate">
-                          {p.name}
-                        </p>
+                        <div className="flex items-center gap-2">
+                          <p className="font-medium text-zinc-900 dark:text-zinc-100 text-sm truncate">
+                            {p.name}
+                          </p>
+                          {p.is_active && (
+                            <span className="text-xs text-zinc-500">
+                              (active)
+                            </span>
+                          )}
+                        </div>
                         <p className="text-xs text-zinc-500">
-                          {p.steps.length} step{p.steps.length !== 1 ? "s" : ""}: {p.steps.join(" -> ")}
+                          {p.steps.length} step{p.steps.length !== 1 ? "s" : ""}: {p.steps.join(" → ")}
                         </p>
                       </div>
                       <div className="flex items-center gap-2 ml-2">
+                        {!p.is_active && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleSetActivePipeline(p.id)}
+                          >
+                            Set Active
+                          </Button>
+                        )}
                         <button
                           onClick={() => loadPipelineForEdit(p)}
                           className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
@@ -260,23 +373,35 @@ export default function CustomerCompaniesPipelinesPage() {
                     </div>
                   ))}
                 </div>
-                <div className="mt-3 border-t border-zinc-200 dark:border-zinc-700 pt-3">
-                  <p className="text-xs text-zinc-500 text-center">
-                    Or create a new pipeline below
-                  </p>
-                </div>
               </div>
             )}
 
-            {workflows.length === 0 ? (
-              <p className="text-sm text-zinc-500 py-8 text-center">
-                No workflows registered.{" "}
-                <Link href="/workflows" className="text-blue-600 hover:underline">
-                  Create one first
-                </Link>
-              </p>
-            ) : (
-              <>
+            {/* Create/Edit Pipeline - Collapsible */}
+            {workflows.length > 0 && (
+              <Collapsible open={builderOpen || !!editingPipelineId} onOpenChange={setBuilderOpen}>
+                <CollapsibleTrigger asChild>
+                  <button className="w-full flex items-center justify-between p-3 mt-4 border border-zinc-200 dark:border-zinc-700 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors">
+                    <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                      {editingPipelineId ? "Edit Pipeline" : "Create New Pipeline"}
+                    </span>
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      className={`text-zinc-400 transition-transform ${builderOpen || editingPipelineId ? "rotate-180" : ""}`}
+                    >
+                      <path d="m6 9 6 6 6-6" />
+                    </svg>
+                  </button>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <div className="pt-4">
                 {/* Pipeline Name & Description */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                   <div>
@@ -467,17 +592,19 @@ export default function CustomerCompaniesPipelinesPage() {
                   <div>
                     {editingPipelineId && (
                       <button
-                        onClick={resetPipelineForm}
+                        onClick={() => {
+                          resetPipelineForm();
+                          setBuilderOpen(false);
+                        }}
                         className="text-sm text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
                       >
-                        Cancel Edit
+                        Cancel
                       </button>
                     )}
                   </div>
                   <Button
                     onClick={handleSavePipeline}
                     disabled={savingPipeline || pipeline.length === 0 || !pipelineName.trim()}
-                    className="bg-purple-600 hover:bg-purple-700 disabled:bg-zinc-300 disabled:text-zinc-500 disabled:cursor-not-allowed"
                   >
                     {savingPipeline
                       ? "Saving..."
@@ -487,7 +614,9 @@ export default function CustomerCompaniesPipelinesPage() {
                     }
                   </Button>
                 </div>
-              </>
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
             )}
           </CardContent>
         </Card>

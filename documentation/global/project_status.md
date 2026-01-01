@@ -1,9 +1,9 @@
 # Project Status & Milestone Tracker
 
-## Current Phase: Phase 6 (Multi-Workstream Admin Dashboard)
-*   **Status**: Admin Dashboard expanded with multiple client-specific workstreams.
-*   **Last Verified**: January 2026 - CRM Data Upload workstream complete.
-*   **Next Action**: Implement Global Ingest functionality or continue with Phase 5 extraction.
+## Current Phase: Phase 6.8 (Pipeline Inheritance & Configuration)
+*   **Status**: Data Ingestion Workstreams registry complete. Pipeline inheritance model implemented (workstream defaults with client overrides). Workflow Configuration page redesigned to show active pipeline workflows. Client dashboard reorganized with Overview, Data Ingestion Work, Configuration cards.
+*   **Last Verified**: January 2026 - Workstream slug mismatch fix applied, active pipelines now resolve correctly.
+*   **Next Action**: Implement Overview page content, or continue with Phase 5 extraction, or Phase 7 Global Ingest.
 
 ---
 
@@ -228,6 +228,89 @@ This phase introduces a modular, workstream-based architecture for the admin das
 
 ---
 
+### ✅ Phase 6.8: Data Ingestion Workstreams Registry & Pipeline Inheritance Model
+
+This phase introduces a centralized registry for data ingestion workstreams and implements a pipeline inheritance model where clients can either use workstream-level default pipelines or create custom overrides.
+
+#### 6.8.1 Data Ingestion Workstreams Registry
+*   [x] **Database**: Create `data_ingestion_workstreams` table
+    *   Columns: `slug` (PK), `name`, `description`, `icon`, `color`, `table_name`, `route_path`, `is_active`, `created_at`
+    *   Purpose: Central registry of all workstream types (apollo_scrape, customer_companies, salesnav_koolkit, crm_data)
+*   [x] **Server Actions**:
+    *   `getDataIngestionWorkstreams()` - fetch all workstreams
+    *   `getActiveWorkstreams()` - fetch only active workstreams
+    *   `createDataIngestionWorkstream()`, `updateDataIngestionWorkstream()`, `deleteDataIngestionWorkstream()`
+*   [x] **Admin UI**: Workstream management at `/admin/workstreams`
+    *   Create/edit workstreams with all metadata
+    *   Per-workstream pages: `/admin/workstreams/[slug]` with workflows and pipelines management
+
+#### 6.8.2 Pipeline Inheritance Model
+*   [x] **Architecture Decision**: Implement two-tier pipeline system
+    *   **Workstream Default Pipelines**: Stored with `client_id = NULL`, applies to all clients
+    *   **Client Custom Pipelines**: Stored with specific `client_id`, overrides the default
+*   [x] **Active Pipeline Resolution** (`getActivePipelineForClient()`):
+    1. First check for client-specific active pipeline (`is_active = true`, `client_id = clientId`)
+    2. Fall back to workstream default (`is_active = true`, `client_id = NULL`)
+*   [x] **Admin Workstream Pipelines Page** (`/admin/workstreams/[slug]/pipelines`):
+    *   Manage workstream-level default pipelines
+    *   Set active default for the workstream
+*   [x] **Client Pipelines Page** (`/clients/[id]/apollo-ingest/pipelines`):
+    *   Shows "Active Pipeline" section with inheritance indicator ("default" vs "custom")
+    *   Create client-specific custom pipelines to override default
+    *   "Use Default" button to revert to inherited workstream default
+
+#### 6.8.3 Workflow Configuration Page Redesign
+*   [x] **Workflow Configuration Page** (`/clients/[id]/apollo-ingest/config`):
+    *   **Top Section**: Active Pipeline Workflows
+        *   Shows which pipeline is active (with "Custom" or "Inherited Default" badge)
+        *   Displays workflows from the active pipeline's `steps` array
+        *   Each workflow card shows: name, slug, type (SYNC/ASYNC), configuration status
+        *   ASYNC workflows that need webhook URLs are highlighted
+    *   **Bottom Section**: All Available Workflows (collapsible, closed by default)
+        *   Reference list of all workflows registered for this workstream
+*   [x] **Workflow `requires_clay` Field**:
+    *   Added `requires_clay` boolean column to `enrichment_registry` table
+    *   SQL: `ALTER TABLE enrichment_registry ADD COLUMN requires_clay BOOLEAN DEFAULT true;`
+    *   Create/Edit workflow forms include checkbox: "Requires Clay - Check if this workflow requires a Clay webhook URL to be configured per client"
+    *   View Workflows table shows "Clay" column indicating which workflows need per-client config
+
+#### 6.8.4 Client Dashboard Reorganization
+*   [x] **New Card Structure**:
+    1. **Overview** (violet) - Client summary and status (placeholder)
+    2. **Data Ingestion Work** (amber) - View all ingestion jobs/batches
+    3. **Configuration** (zinc) - Access workstream configuration pages
+    4. **Archive** (collapsible) - Contains legacy workstream cards:
+        *   Apollo Scrape Ingest, Customer Companies, SalesNav KoolKit, CRM Data Upload
+*   [x] **Data Ingestion Work Page** (`/clients/[id]/data-ingestion`):
+    *   Table of all batches for client showing: Batch ID, Status, Item Count, Pipeline Steps, Created Date
+    *   Status badges: PENDING, RUNNING, COMPLETED, FAILED
+*   [x] **Configuration Page** (`/clients/[id]/config`):
+    *   Table of active Data Ingestion Workstreams
+    *   Rows are clickable, navigate to workstream-specific config page
+    *   Route mapping: workstream slug → route path (e.g., `apollo_scrape` → `apollo-ingest`)
+
+#### 6.8.5 Bug Fix: Workstream Slug Mismatch
+*   [x] **Issue Identified**: Active pipeline not showing in Workflow Configuration page
+*   [x] **Root Cause**: Naming inconsistency between admin and client pages
+    *   Admin pages use URL slug directly (e.g., `apollo_scrape`)
+    *   Client pages had hardcoded `WORKSTREAM_SLUG = "apollo_ingest"` (incorrect)
+    *   Pipeline stored with `workstream_slug = "apollo_scrape"` was not found by query using `"apollo_ingest"`
+*   [x] **Fix Applied**: Changed `WORKSTREAM_SLUG` from `"apollo_ingest"` to `"apollo_scrape"` in:
+    *   `/clients/[id]/apollo-ingest/config/page.tsx` (line 31)
+    *   `/clients/[id]/apollo-ingest/pipelines/page.tsx` (line 33)
+*   [x] **Lesson Learned**: Route paths (URL) can differ from database slugs, but queries must use the database slug consistently
+
+#### 6.8.6 UX Simplifications
+*   [x] Reduced visual noise per user feedback:
+    *   Removed excessive colored badges, replaced with parenthetical text: `(active)`, `(default)`, `(custom)`
+    *   Removed checkmark icons and heavy green/amber backgrounds
+    *   Removed redundant "Workstream Default Pipeline" card
+    *   Consolidated duplicate buttons (e.g., "Go to Pipelines" + "Manage Pipelines" → single button)
+*   [x] Made pipeline builder collapsible and closed by default
+*   [x] Reduced card sizes in Archive section for visual hierarchy
+
+---
+
 ### ⬜ Phase 5: Result Extraction & GTM Dashboard (Pending)
 *   [ ] **Extraction Workflow**: Targeted functions (`extract_work_history`, `extract_contact_info`) to project JSONB data into specific Relational Tables for analysis.
 *   [ ] **GTM View Schema**: Define `final_leads` and `work_history` tables optimized for filtering.
@@ -244,15 +327,25 @@ This phase introduces a modular, workstream-based architecture for the admin das
 
 ### Admin Dashboard Structure
 ```
-/                           → Home (6 cards: Client Manager, Workflow Registry, Schema Viewer, + 3 Coming Soon)
-/clients                    → Client list + create
-/clients/[id]               → Client dashboard with workstream cards
-/clients/[id]/apollo-ingest → Apollo Scrape data (upload, history, pipelines, config)
-/clients/[id]/customer-companies → Customer Companies (upload, history, pipelines, config)
-/clients/[id]/salesnav-koolkit   → SalesNav KoolKit (upload, history, pipelines, config)
-/clients/[id]/crm-data           → CRM Data (upload, history, pipelines, config)
-/workflows                  → Workflow Registry (CRUD)
-/schema                     → Database Schema Viewer
+/                                    → Home (6 cards: Client Manager, Workflow Registry, Schema Viewer, + 3 Coming Soon)
+/clients                             → Client list + create
+/clients/[id]                        → Client dashboard (Overview, Data Ingestion Work, Configuration, Archive)
+/clients/[id]/overview               → Client summary (placeholder)
+/clients/[id]/data-ingestion         → All ingestion batches for client
+/clients/[id]/config                 → Workstream selection (clickable table)
+/clients/[id]/apollo-ingest          → Apollo Scrape workstream main page
+/clients/[id]/apollo-ingest/config   → Workflow Configuration (active pipeline workflows + config)
+/clients/[id]/apollo-ingest/pipelines → Client pipelines (create custom, use default)
+/clients/[id]/customer-companies     → Customer Companies (upload, history, pipelines, config)
+/clients/[id]/salesnav-koolkit       → SalesNav KoolKit (upload, history, pipelines, config)
+/clients/[id]/crm-data               → CRM Data (upload, history, pipelines, config)
+/admin/workstreams                   → Data Ingestion Workstreams registry
+/admin/workstreams/[slug]            → Workstream detail page
+/admin/workstreams/[slug]/workflows  → View/edit workflows for workstream
+/admin/workstreams/[slug]/pipelines  → Workstream default pipelines
+/admin/workstreams/[slug]/create-workflow → Create new workflow
+/workflows                           → Workflow Registry (CRUD)
+/schema                              → Database Schema Viewer
 ```
 
 ### Database Tables
@@ -262,10 +355,11 @@ This phase introduces a modular, workstream-based architecture for the admin das
 | `batches` | Batch job records |
 | `batch_items` | Individual items in batches |
 | `workflow_states` | State machine for workflow execution |
-| `enrichment_registry` | Registered workflows (SYNC/ASYNC) |
+| `enrichment_registry` | Registered workflows (SYNC/ASYNC, `requires_clay` boolean) |
 | `enrichment_results` | JSONB results from workflows |
-| `enrichment_pipelines` | Client-specific saved pipelines |
-| `client_workflow_configs` | Per-client workflow configurations |
+| `enrichment_pipelines` | Pipelines (`client_id` NULL = workstream default, non-NULL = client custom) |
+| `client_workflow_configs` | Per-client workflow configurations (webhook URLs, etc.) |
+| `data_ingestion_workstreams` | Registry of workstream types (slug, name, route_path, etc.) |
 | `raw_apollo_data` | Apollo CSV staging data |
 | `client_customer_companies` | Customer companies workstream data |
 | `client_salesnav_koolkit` | SalesNav KoolKit workstream data |

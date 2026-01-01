@@ -65,26 +65,33 @@ def fetch_pending_items(batch_size: int = 50) -> list[dict]:
     Fetch workflow_states with status='PENDING', enriched with batch_item data
     and enrichment_registry function mappings.
 
+    Uses composite key (slug, workstream_slug) for precise enrichment_registry lookup.
+
     Returns list of dicts with: item_id, step_name, workflow_state_id,
-    modal_sender_fn, workflow_type
+    modal_sender_fn, workflow_type, workstream_slug
     """
     logger = get_run_logger()
     conn = get_db_connection()
 
     try:
         with conn.cursor() as cur:
-            # Join workflow_states with enrichment_registry to get function names
+            # Join workflow_states -> batches (for workstream_slug)
+            # Join with enrichment_registry using composite key (slug, workstream_slug)
             cur.execute("""
                 SELECT
                     ws.id as workflow_state_id,
                     ws.item_id,
                     ws.step_name,
                     ws.batch_id,
+                    b.workstream_slug,
                     er.type as workflow_type,
                     er.modal_sender_fn,
                     er.modal_receiver_fn
                 FROM workflow_states ws
-                LEFT JOIN enrichment_registry er ON ws.step_name = er.slug
+                JOIN batches b ON ws.batch_id = b.id
+                LEFT JOIN enrichment_registry er 
+                    ON ws.step_name = er.slug 
+                    AND b.workstream_slug = er.workstream_slug
                 WHERE ws.status = 'PENDING'
                 ORDER BY ws.updated_at ASC
                 LIMIT %s
@@ -250,6 +257,7 @@ def dispatch_to_modal(item: dict) -> dict:
     """
     Dispatch a single item to the appropriate Modal function.
     Uses .spawn() for async fire-and-forget execution.
+    Passes workstream_slug for precise config lookup.
 
     Returns dispatch result with status.
     """
@@ -259,6 +267,7 @@ def dispatch_to_modal(item: dict) -> dict:
     step_name = item["step_name"]
     modal_fn_name = item.get("modal_sender_fn")
     workflow_type = item.get("workflow_type")
+    workstream_slug = item.get("workstream_slug")
 
     if not modal_fn_name:
         logger.warning(f"No modal_sender_fn for step '{step_name}', skipping item {item_id[:8]}...")
@@ -272,15 +281,16 @@ def dispatch_to_modal(item: dict) -> dict:
         # Lookup the Modal function
         fn = modal.Function.from_name("data-enrichment-workers", modal_fn_name)
 
-        # Spawn async execution (fire-and-forget)
-        call = fn.spawn(item_id)
+        # Spawn async execution with workstream_slug for precise config lookup
+        call = fn.spawn(item_id, workstream_slug)
 
-        logger.info(f"Dispatched item {item_id[:8]}... to {modal_fn_name} (type={workflow_type})")
+        logger.info(f"Dispatched item {item_id[:8]}... to {modal_fn_name} (type={workflow_type}, workstream={workstream_slug})")
 
         return {
             "item_id": item_id,
             "status": "dispatched",
             "function": modal_fn_name,
+            "workstream_slug": workstream_slug,
             "call_id": str(call.object_id) if hasattr(call, 'object_id') else None
         }
 

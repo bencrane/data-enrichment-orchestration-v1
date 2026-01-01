@@ -81,135 +81,134 @@ export default function ClientDashboard() {
       </header>
 
       <main className="container mx-auto px-6 py-8">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {/* Apollo Scrape Ingest */}
-          <Link href={`/clients/${clientId}/apollo-ingest`}>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {/* Overview */}
+          <Link href={`/clients/${clientId}/overview`}>
             <Card className="cursor-pointer hover:border-zinc-400 dark:hover:border-zinc-500 transition-colors h-full">
-              <div className="p-6 flex flex-col items-center justify-center text-center min-h-[160px]">
-                <div className="w-12 h-12 rounded-full bg-indigo-50 dark:bg-indigo-900/20 flex items-center justify-center mb-3">
+              <div className="p-4 flex flex-col items-center justify-center text-center min-h-[100px]">
+                <div className="w-10 h-10 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center mb-2">
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
-                    width="24"
-                    height="24"
+                    width="20"
+                    height="20"
                     viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"
                     strokeWidth="2"
                     strokeLinecap="round"
                     strokeLinejoin="round"
-                    className="text-indigo-600 dark:text-indigo-400"
+                    className="text-zinc-600 dark:text-zinc-400"
                   >
-                    <circle cx="12" cy="12" r="10" />
-                    <path d="M12 16v-4" />
-                    <path d="M12 8h.01" />
+                    <rect width="7" height="9" x="3" y="3" rx="1" />
+                    <rect width="7" height="5" x="14" y="3" rx="1" />
+                    <rect width="7" height="9" x="14" y="12" rx="1" />
+                    <rect width="7" height="5" x="3" y="16" rx="1" />
                   </svg>
                 </div>
-                <h3 className="font-semibold text-zinc-900 dark:text-zinc-100">
-                  Apollo Scrape Ingest
+                <h3 className="font-medium text-sm text-zinc-900 dark:text-zinc-100">
+                  Overview
                 </h3>
-                <p className="text-sm text-zinc-500 mt-1">
-                  Upload, enrich, and configure
+                <p className="text-xs text-zinc-500 mt-0.5">
+                  Summary and status
                 </p>
               </div>
             </Card>
           </Link>
 
-          {/* Customer Companies */}
-          <Link href={`/clients/${clientId}/customer-companies`}>
+          {/* Data Ingestion Work */}
+          <Link href={`/clients/${clientId}/data-ingestion`}>
             <Card className="cursor-pointer hover:border-zinc-400 dark:hover:border-zinc-500 transition-colors h-full">
-              <div className="p-6 flex flex-col items-center justify-center text-center min-h-[160px]">
-                <div className="w-12 h-12 rounded-full bg-emerald-50 dark:bg-emerald-900/20 flex items-center justify-center mb-3">
+              <div className="p-4 flex flex-col items-center justify-center text-center min-h-[100px]">
+                <div className="w-10 h-10 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center mb-2">
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
-                    width="24"
-                    height="24"
+                    width="20"
+                    height="20"
                     viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"
                     strokeWidth="2"
                     strokeLinecap="round"
                     strokeLinejoin="round"
-                    className="text-emerald-600 dark:text-emerald-400"
+                    className="text-zinc-600 dark:text-zinc-400"
                   >
-                    <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-                    <polyline points="9 22 9 12 15 12 15 22" />
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <polyline points="17 8 12 3 7 8" />
+                    <line x1="12" x2="12" y1="3" y2="15" />
                   </svg>
                 </div>
-                <h3 className="font-semibold text-zinc-900 dark:text-zinc-100">
-                  Customer Companies
+                <h3 className="font-medium text-sm text-zinc-900 dark:text-zinc-100">
+                  Data Ingestion
                 </h3>
-                <p className="text-sm text-zinc-500 mt-1">
-                  Upload, enrich, and configure
+                <p className="text-xs text-zinc-500 mt-0.5">
+                  Active jobs
                 </p>
               </div>
             </Card>
           </Link>
 
-          {/* SalesNav KoolKit */}
-          <Link href={`/clients/${clientId}/salesnav-koolkit`}>
+          {/* Configuration */}
+          <Link href={`/clients/${clientId}/config`}>
             <Card className="cursor-pointer hover:border-zinc-400 dark:hover:border-zinc-500 transition-colors h-full">
-              <div className="p-6 flex flex-col items-center justify-center text-center min-h-[160px]">
-                <div className="w-12 h-12 rounded-full bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center mb-3">
+              <div className="p-4 flex flex-col items-center justify-center text-center min-h-[100px]">
+                <div className="w-10 h-10 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center mb-2">
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
-                    width="24"
-                    height="24"
+                    width="20"
+                    height="20"
                     viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"
                     strokeWidth="2"
                     strokeLinecap="round"
                     strokeLinejoin="round"
-                    className="text-blue-600 dark:text-blue-400"
+                    className="text-zinc-600 dark:text-zinc-400"
                   >
-                    <path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z" />
-                    <rect width="4" height="12" x="2" y="9" />
-                    <circle cx="4" cy="4" r="2" />
+                    <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+                    <circle cx="12" cy="12" r="3" />
                   </svg>
                 </div>
-                <h3 className="font-semibold text-zinc-900 dark:text-zinc-100">
-                  SalesNav KoolKit
+                <h3 className="font-medium text-sm text-zinc-900 dark:text-zinc-100">
+                  Configuration
                 </h3>
-                <p className="text-sm text-zinc-500 mt-1">
-                  Upload, enrich, and configure
+                <p className="text-xs text-zinc-500 mt-0.5">
+                  Endpoints and settings
                 </p>
               </div>
             </Card>
           </Link>
 
-          {/* CRM Data Upload */}
-          <Link href={`/clients/${clientId}/crm-data`}>
-            <Card className="cursor-pointer hover:border-zinc-400 dark:hover:border-zinc-500 transition-colors h-full">
-              <div className="p-6 flex flex-col items-center justify-center text-center min-h-[160px]">
-                <div className="w-12 h-12 rounded-full bg-rose-50 dark:bg-rose-900/20 flex items-center justify-center mb-3">
+          {/* Archive */}
+          <Link href={`/clients/${clientId}/archive`}>
+            <Card className="cursor-pointer hover:border-zinc-400 dark:hover:border-zinc-500 transition-colors h-full bg-zinc-50 dark:bg-zinc-900/50">
+              <div className="p-4 flex flex-col items-center justify-center text-center min-h-[100px]">
+                <div className="w-10 h-10 rounded-full bg-zinc-200 dark:bg-zinc-700 flex items-center justify-center mb-2">
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
-                    width="24"
-                    height="24"
+                    width="20"
+                    height="20"
                     viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"
                     strokeWidth="2"
                     strokeLinecap="round"
                     strokeLinejoin="round"
-                    className="text-rose-600 dark:text-rose-400"
+                    className="text-zinc-500 dark:text-zinc-400"
                   >
-                    <path d="M4 22h14a2 2 0 0 0 2-2V7l-5-5H6a2 2 0 0 0-2 2v4" />
-                    <path d="M14 2v4a2 2 0 0 0 2 2h4" />
-                    <path d="M3 15h6" />
-                    <path d="M6 12v6" />
+                    <rect width="20" height="5" x="2" y="3" rx="1" />
+                    <path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8" />
+                    <path d="M10 12h4" />
                   </svg>
                 </div>
-                <h3 className="font-semibold text-zinc-900 dark:text-zinc-100">
-                  CRM Data Upload
+                <h3 className="font-medium text-sm text-zinc-600 dark:text-zinc-400">
+                  Archive
                 </h3>
-                <p className="text-sm text-zinc-500 mt-1">
-                  Upload, enrich, and configure
+                <p className="text-xs text-zinc-400 dark:text-zinc-500 mt-0.5">
+                  Legacy workstreams
                 </p>
               </div>
             </Card>
           </Link>
-
         </div>
       </main>
     </div>

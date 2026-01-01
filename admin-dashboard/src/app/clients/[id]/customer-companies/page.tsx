@@ -101,7 +101,7 @@ export default function CustomerCompaniesPage() {
           <Link href={`/clients/${clientId}/customer-companies/upload`}>
             <Card className="cursor-pointer hover:border-zinc-400 dark:hover:border-zinc-500 transition-colors h-full">
               <div className="p-6 flex flex-col items-center justify-center text-center min-h-[160px]">
-                <div className="w-12 h-12 rounded-full bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center mb-3">
+                <div className="w-12 h-12 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center mb-3">
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
                     width="24"
@@ -112,7 +112,7 @@ export default function CustomerCompaniesPage() {
                     strokeWidth="2"
                     strokeLinecap="round"
                     strokeLinejoin="round"
-                    className="text-blue-600 dark:text-blue-400"
+                    className="text-zinc-600 dark:text-zinc-400"
                   >
                     <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
                     <polyline points="17 8 12 3 7 8" />
@@ -133,7 +133,7 @@ export default function CustomerCompaniesPage() {
           <Link href={`/clients/${clientId}/customer-companies/uploads`}>
             <Card className="cursor-pointer hover:border-zinc-400 dark:hover:border-zinc-500 transition-colors h-full">
               <div className="p-6 flex flex-col items-center justify-center text-center min-h-[160px]">
-                <div className="w-12 h-12 rounded-full bg-green-50 dark:bg-green-900/20 flex items-center justify-center mb-3">
+                <div className="w-12 h-12 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center mb-3">
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
                     width="24"
@@ -144,7 +144,7 @@ export default function CustomerCompaniesPage() {
                     strokeWidth="2"
                     strokeLinecap="round"
                     strokeLinejoin="round"
-                    className="text-green-600 dark:text-green-400"
+                    className="text-zinc-600 dark:text-zinc-400"
                   >
                     <path d="M3 15v4c0 1.1.9 2 2 2h14a2 2 0 0 0 2-2v-4M17 9l-5 5-5-5M12 12.8V2.5" />
                   </svg>
@@ -166,7 +166,7 @@ export default function CustomerCompaniesPage() {
           <Link href={`/clients/${clientId}/customer-companies/pipelines`}>
             <Card className="cursor-pointer hover:border-zinc-400 dark:hover:border-zinc-500 transition-colors h-full">
               <div className="p-6 flex flex-col items-center justify-center text-center min-h-[160px]">
-                <div className="w-12 h-12 rounded-full bg-purple-50 dark:bg-purple-900/20 flex items-center justify-center mb-3">
+                <div className="w-12 h-12 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center mb-3">
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
                     width="24"
@@ -177,7 +177,7 @@ export default function CustomerCompaniesPage() {
                     strokeWidth="2"
                     strokeLinecap="round"
                     strokeLinejoin="round"
-                    className="text-purple-600 dark:text-purple-400"
+                    className="text-zinc-600 dark:text-zinc-400"
                   >
                     <path d="M3 12h4l3 9 4-18 3 9h4" />
                   </svg>
@@ -199,7 +199,7 @@ export default function CustomerCompaniesPage() {
           <Link href={`/clients/${clientId}/customer-companies/config`}>
             <Card className="cursor-pointer hover:border-zinc-400 dark:hover:border-zinc-500 transition-colors h-full">
               <div className="p-6 flex flex-col items-center justify-center text-center min-h-[160px]">
-                <div className="w-12 h-12 rounded-full bg-orange-50 dark:bg-orange-900/20 flex items-center justify-center mb-3">
+                <div className="w-12 h-12 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center mb-3">
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
                     width="24"
@@ -210,7 +210,7 @@ export default function CustomerCompaniesPage() {
                     strokeWidth="2"
                     strokeLinecap="round"
                     strokeLinejoin="round"
-                    className="text-orange-600 dark:text-orange-400"
+                    className="text-zinc-600 dark:text-zinc-400"
                   >
                     <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
                     <circle cx="12" cy="12" r="3" />
