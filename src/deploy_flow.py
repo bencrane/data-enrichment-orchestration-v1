@@ -33,6 +33,14 @@ def deploy():
         description="Event-driven orchestrator: polls for PENDING workflow_states and dispatches to Modal workers. Triggered by database INSERT on batches table.",
         parameters={"batch_size": 50},
         # No schedule - triggered by Edge Function via Prefect API
+        job_variables={
+            "pip_packages": ["psycopg2-binary", "modal", "python-dotenv"],
+            "env": {
+                # Modal credentials for dispatching to Modal workers
+                "MODAL_TOKEN_ID": "{{ prefect.blocks.secret.modal-token-id }}",
+                "MODAL_TOKEN_SECRET": "{{ prefect.blocks.secret.modal-token-secret }}",
+            },
+        },
     )
 
     print("=" * 60)
