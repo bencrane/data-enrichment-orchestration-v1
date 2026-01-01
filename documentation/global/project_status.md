@@ -1,9 +1,9 @@
 # Project Status & Milestone Tracker
 
-## Current Phase: Phase 5 (Result Extraction)
-*   **Status**: Client Configuration (Phase 3.7) Complete.
-*   **Last Verified**: Configuration UI and Worker logic implemented.
-*   **Next Action**: Implement targeted extraction functions (Phase 5).
+## Current Phase: Phase 6 (Multi-Workstream Admin Dashboard)
+*   **Status**: Admin Dashboard expanded with multiple client-specific workstreams.
+*   **Last Verified**: January 2026 - CRM Data Upload workstream complete.
+*   **Next Action**: Implement Global Ingest functionality or continue with Phase 5 extraction.
 
 ---
 
@@ -102,6 +102,7 @@
 *   [x] Implement `update_state_to_queued` task - prevents re-pickup by concurrent runs
 *   [x] Implement `dispatch_to_modal` task - uses `modal.Function.from_name().spawn()` for async dispatch
 *   [x] Create deployment script (`src/deploy_flow.py`) - 60s interval schedule
+*   [x] Migrate to Prefect Managed infrastructure (no self-hosted workers)
 *   [x] **Verification**: Ran locally, connected to Prefect Cloud, flow completed successfully.
 
 ### ✅ Phase 3.4: Blueprint Builder UI
@@ -159,7 +160,136 @@
     *   Update `start_enrich_company_via_waterfall_in_clay` to use the fetched Webhook URL.
 *   [x] **Verification**: Verified UI allows saving configs and workers act on them.
 
-### ⬜ Phase 5: Result Extraction & GTM Dashboard (Immediate Sequel)
+---
+
+### ✅ Phase 6: Multi-Workstream Admin Dashboard
+
+This phase introduces a modular, workstream-based architecture for the admin dashboard, allowing multiple data source types to be managed independently per client.
+
+#### 6.1 Client Dashboard Refactor
+*   [x] Refactor Client Dashboard (`/clients/[id]`) from tabs to card-based navigation
+*   [x] Each workstream gets its own card linking to dedicated sub-pages
+*   [x] Consistent card structure: Upload, Past Uploads, Pipelines, Config
+
+#### 6.2 Apollo Scrape Ingest Workstream
+*   [x] Create `/clients/[id]/apollo-ingest/` page structure
+*   [x] Implement Upload page with CSV parsing
+*   [x] Implement Past Uploads page
+*   [x] Implement Pipelines page with workstream isolation (`apollo_scrape`)
+*   [x] Implement Config page with workstream isolation
+
+#### 6.3 Customer Companies Workstream
+*   [x] **Database**: Create `client_customer_companies` table
+    *   Columns: `id`, `client_id`, `upload_id`, `company_name`, `domain`, `company_linkedin_url`, `created_at`
+*   [x] **Server Actions**: `getCustomerCompanyUploads`, `uploadCustomerCompanies`
+*   [x] Create `/clients/[id]/customer-companies/` page structure
+*   [x] Implement Upload page with flexible CSV header mapping
+*   [x] Implement Past Uploads page
+*   [x] Implement Pipelines page with workstream isolation (`customer_companies`)
+*   [x] Implement Config page with workstream isolation
+*   [x] Add Customer Companies card to Client Dashboard (emerald color)
+
+#### 6.4 SalesNav KoolKit Workstream
+*   [x] **Database**: Create `client_salesnav_koolkit` table
+    *   Columns: 21 fields including `matching_filters`, `linkedin_user_profile_urn`, `first_name`, `last_name`, `email`, `phone_number`, `profile_headline`, `profile_summary`, `job_title`, `job_description`, `job_started_on`, `linkedin_url_user_profile`, `location`, `company`, `linkedin_company_profile_urn`, `linkedin_url_company`, `company_website`, `company_description`, `company_headcount`, `company_industries`, `company_registered_address`
+*   [x] **Server Actions**: `getSalesNavKoolKitUploads`, `uploadSalesNavKoolKit`
+*   [x] Create `/clients/[id]/salesnav-koolkit/` page structure
+*   [x] Implement Upload page with extensive CSV header mapping (handles parentheses in headers)
+*   [x] Implement Past Uploads page
+*   [x] Implement Pipelines page with workstream isolation (`salesnav_koolkit`)
+*   [x] Implement Config page with workstream isolation
+*   [x] Add SalesNav KoolKit card to Client Dashboard (blue/LinkedIn color)
+
+#### 6.5 CRM Data Upload Workstream
+*   [x] **Database**: Create `client_crm_data` table
+    *   Columns: `id`, `client_id`, `upload_id`, `company_name`, `domain`, `company_linkedin_url`, `first_name`, `last_name`, `person_linkedin_url`, `work_email`, `mobile_phone`, `notes`, `created_at`
+    *   All fields nullable TEXT
+*   [x] **Server Actions**: `getCrmDataUploads`, `uploadCrmData`
+*   [x] Create `/clients/[id]/crm-data/` page structure
+*   [x] Implement Upload page with flexible CSV header mapping
+*   [x] Implement Past Uploads page
+*   [x] Implement Pipelines page with workstream isolation (`crm_data`)
+*   [x] Implement Config page with workstream isolation
+*   [x] Add CRM Data Upload card to Client Dashboard (rose color)
+
+#### 6.6 Documentation
+*   [x] Create `documentation/guides/adding_new_workstream.md`
+    *   Step-by-step guide for adding new workstreams
+    *   Database table template with indexes
+    *   Server actions template (types, get uploads, upload function)
+    *   Page structure template (5 pages)
+    *   CSV header mapping pattern
+    *   Client dashboard card integration
+
+#### 6.7 Main Dashboard Updates
+*   [x] Add Global Ingest placeholder card (Coming Soon)
+*   [x] Existing cards: Client Manager, Workflow Registry, Table Schema Viewer
+*   [x] Placeholder cards: Batch Monitor, Workflow States, Global Ingest
+
+---
+
+### ⬜ Phase 5: Result Extraction & GTM Dashboard (Pending)
 *   [ ] **Extraction Workflow**: Targeted functions (`extract_work_history`, `extract_contact_info`) to project JSONB data into specific Relational Tables for analysis.
 *   [ ] **GTM View Schema**: Define `final_leads` and `work_history` tables optimized for filtering.
 *   [ ] **Work History Analysis**: Feature to trace lead movement across companies.
+
+### ⬜ Phase 7: Global Ingest (Planned)
+*   [ ] Implement cross-client data ingestion functionality
+*   [ ] Build Global Ingest UI (`/global-ingest`)
+*   [ ] Enable data sharing/deduplication across clients
+
+---
+
+## Current Architecture
+
+### Admin Dashboard Structure
+```
+/                           → Home (6 cards: Client Manager, Workflow Registry, Schema Viewer, + 3 Coming Soon)
+/clients                    → Client list + create
+/clients/[id]               → Client dashboard with workstream cards
+/clients/[id]/apollo-ingest → Apollo Scrape data (upload, history, pipelines, config)
+/clients/[id]/customer-companies → Customer Companies (upload, history, pipelines, config)
+/clients/[id]/salesnav-koolkit   → SalesNav KoolKit (upload, history, pipelines, config)
+/clients/[id]/crm-data           → CRM Data (upload, history, pipelines, config)
+/workflows                  → Workflow Registry (CRUD)
+/schema                     → Database Schema Viewer
+```
+
+### Database Tables
+| Table | Purpose |
+|-------|---------|
+| `clients` | Client companies |
+| `batches` | Batch job records |
+| `batch_items` | Individual items in batches |
+| `workflow_states` | State machine for workflow execution |
+| `enrichment_registry` | Registered workflows (SYNC/ASYNC) |
+| `enrichment_results` | JSONB results from workflows |
+| `enrichment_pipelines` | Client-specific saved pipelines |
+| `client_workflow_configs` | Per-client workflow configurations |
+| `raw_apollo_data` | Apollo CSV staging data |
+| `client_customer_companies` | Customer companies workstream data |
+| `client_salesnav_koolkit` | SalesNav KoolKit workstream data |
+| `client_crm_data` | CRM data workstream data |
+
+### Workstream Pattern
+Each workstream follows this consistent pattern:
+1. **Database Table**: `client_{workstream_name}` with `client_id`, `upload_id`, and workstream-specific columns
+2. **Server Actions**: Types + `get{Workstream}Uploads` + `upload{Workstream}` in `actions.ts`
+3. **Pages**: 5 pages per workstream (main, upload, uploads, pipelines, config)
+4. **Dashboard Card**: Colored card on client dashboard linking to workstream main page
+5. **Workstream Isolation**: Pipelines and configs use workstream parameter for filtering
+
+---
+
+## File Reference
+
+| Directory | Purpose |
+|-----------|---------|
+| `admin-dashboard/src/app/` | Next.js App Router pages |
+| `admin-dashboard/src/app/actions.ts` | Server actions (all data operations) |
+| `admin-dashboard/src/components/ui/` | Shadcn/UI components |
+| `src/worker.py` | Modal worker functions |
+| `src/orchestrator.py` | Prefect orchestration flow |
+| `documentation/` | Project documentation |
+| `documentation/guides/` | How-to guides |
+| `scripts/` | Database and utility scripts |

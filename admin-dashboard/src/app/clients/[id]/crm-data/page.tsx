@@ -3,15 +3,10 @@
 import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import {
-  Card,
-} from "@/components/ui/card";
-import {
-  getClientById,
-  Client,
-} from "@/app/actions";
+import { Card } from "@/components/ui/card";
+import { getClientById, Client } from "@/app/actions";
 
-export default function ClientDashboard() {
+export default function CrmDataPage() {
   const params = useParams();
   const clientId = params.id as string;
 
@@ -50,7 +45,7 @@ export default function ClientDashboard() {
         <div className="container mx-auto px-6 py-4">
           <div className="flex items-center gap-4">
             <Link
-              href="/clients"
+              href={`/clients/${clientId}`}
               className="text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
             >
               <svg
@@ -70,10 +65,10 @@ export default function ClientDashboard() {
             </Link>
             <div>
               <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">
-                {client.company_name}
+                CRM Data Upload
               </h1>
               <p className="text-sm text-zinc-500 dark:text-zinc-400">
-                {client.company_domain}
+                {client.company_name}
               </p>
             </div>
           </div>
@@ -81,104 +76,9 @@ export default function ClientDashboard() {
       </header>
 
       <main className="container mx-auto px-6 py-8">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {/* Apollo Scrape Ingest */}
-          <Link href={`/clients/${clientId}/apollo-ingest`}>
-            <Card className="cursor-pointer hover:border-zinc-400 dark:hover:border-zinc-500 transition-colors h-full">
-              <div className="p-6 flex flex-col items-center justify-center text-center min-h-[160px]">
-                <div className="w-12 h-12 rounded-full bg-indigo-50 dark:bg-indigo-900/20 flex items-center justify-center mb-3">
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    width="24"
-                    height="24"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    className="text-indigo-600 dark:text-indigo-400"
-                  >
-                    <circle cx="12" cy="12" r="10" />
-                    <path d="M12 16v-4" />
-                    <path d="M12 8h.01" />
-                  </svg>
-                </div>
-                <h3 className="font-semibold text-zinc-900 dark:text-zinc-100">
-                  Apollo Scrape Ingest
-                </h3>
-                <p className="text-sm text-zinc-500 mt-1">
-                  Upload, enrich, and configure
-                </p>
-              </div>
-            </Card>
-          </Link>
-
-          {/* Customer Companies */}
-          <Link href={`/clients/${clientId}/customer-companies`}>
-            <Card className="cursor-pointer hover:border-zinc-400 dark:hover:border-zinc-500 transition-colors h-full">
-              <div className="p-6 flex flex-col items-center justify-center text-center min-h-[160px]">
-                <div className="w-12 h-12 rounded-full bg-emerald-50 dark:bg-emerald-900/20 flex items-center justify-center mb-3">
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    width="24"
-                    height="24"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    className="text-emerald-600 dark:text-emerald-400"
-                  >
-                    <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-                    <polyline points="9 22 9 12 15 12 15 22" />
-                  </svg>
-                </div>
-                <h3 className="font-semibold text-zinc-900 dark:text-zinc-100">
-                  Customer Companies
-                </h3>
-                <p className="text-sm text-zinc-500 mt-1">
-                  Upload, enrich, and configure
-                </p>
-              </div>
-            </Card>
-          </Link>
-
-          {/* SalesNav KoolKit */}
-          <Link href={`/clients/${clientId}/salesnav-koolkit`}>
-            <Card className="cursor-pointer hover:border-zinc-400 dark:hover:border-zinc-500 transition-colors h-full">
-              <div className="p-6 flex flex-col items-center justify-center text-center min-h-[160px]">
-                <div className="w-12 h-12 rounded-full bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center mb-3">
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    width="24"
-                    height="24"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    className="text-blue-600 dark:text-blue-400"
-                  >
-                    <path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z" />
-                    <rect width="4" height="12" x="2" y="9" />
-                    <circle cx="4" cy="4" r="2" />
-                  </svg>
-                </div>
-                <h3 className="font-semibold text-zinc-900 dark:text-zinc-100">
-                  SalesNav KoolKit
-                </h3>
-                <p className="text-sm text-zinc-500 mt-1">
-                  Upload, enrich, and configure
-                </p>
-              </div>
-            </Card>
-          </Link>
-
-          {/* CRM Data Upload */}
-          <Link href={`/clients/${clientId}/crm-data`}>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* Upload Files */}
+          <Link href={`/clients/${clientId}/crm-data/upload`}>
             <Card className="cursor-pointer hover:border-zinc-400 dark:hover:border-zinc-500 transition-colors h-full">
               <div className="p-6 flex flex-col items-center justify-center text-center min-h-[160px]">
                 <div className="w-12 h-12 rounded-full bg-rose-50 dark:bg-rose-900/20 flex items-center justify-center mb-3">
@@ -194,22 +94,118 @@ export default function ClientDashboard() {
                     strokeLinejoin="round"
                     className="text-rose-600 dark:text-rose-400"
                   >
-                    <path d="M4 22h14a2 2 0 0 0 2-2V7l-5-5H6a2 2 0 0 0-2 2v4" />
-                    <path d="M14 2v4a2 2 0 0 0 2 2h4" />
-                    <path d="M3 15h6" />
-                    <path d="M6 12v6" />
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <polyline points="17 8 12 3 7 8" />
+                    <line x1="12" x2="12" y1="3" y2="15" />
                   </svg>
                 </div>
                 <h3 className="font-semibold text-zinc-900 dark:text-zinc-100">
-                  CRM Data Upload
+                  Upload Files
                 </h3>
                 <p className="text-sm text-zinc-500 mt-1">
-                  Upload, enrich, and configure
+                  Import CSV data
                 </p>
               </div>
             </Card>
           </Link>
 
+          {/* Past Uploads */}
+          <Link href={`/clients/${clientId}/crm-data/uploads`}>
+            <Card className="cursor-pointer hover:border-zinc-400 dark:hover:border-zinc-500 transition-colors h-full">
+              <div className="p-6 flex flex-col items-center justify-center text-center min-h-[160px]">
+                <div className="w-12 h-12 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center mb-3">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="24"
+                    height="24"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="text-zinc-600 dark:text-zinc-400"
+                  >
+                    <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                    <path d="M3 3v5h5" />
+                    <path d="M12 7v5l4 2" />
+                  </svg>
+                </div>
+                <h3 className="font-semibold text-zinc-900 dark:text-zinc-100">
+                  Past Uploads
+                </h3>
+                <p className="text-sm text-zinc-500 mt-1">
+                  View upload history
+                </p>
+              </div>
+            </Card>
+          </Link>
+
+          {/* Enrichment Pipelines */}
+          <Link href={`/clients/${clientId}/crm-data/pipelines`}>
+            <Card className="cursor-pointer hover:border-zinc-400 dark:hover:border-zinc-500 transition-colors h-full">
+              <div className="p-6 flex flex-col items-center justify-center text-center min-h-[160px]">
+                <div className="w-12 h-12 rounded-full bg-purple-50 dark:bg-purple-900/20 flex items-center justify-center mb-3">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="24"
+                    height="24"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="text-purple-600 dark:text-purple-400"
+                  >
+                    <path d="M8 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3" />
+                    <path d="M16 3h3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-3" />
+                    <path d="M12 20v2" />
+                    <path d="M12 14v2" />
+                    <path d="M12 8v2" />
+                    <path d="M12 2v2" />
+                  </svg>
+                </div>
+                <h3 className="font-semibold text-zinc-900 dark:text-zinc-100">
+                  Enrichment Pipelines
+                </h3>
+                <p className="text-sm text-zinc-500 mt-1">
+                  Configure workflows
+                </p>
+              </div>
+            </Card>
+          </Link>
+
+          {/* Workflow Configuration */}
+          <Link href={`/clients/${clientId}/crm-data/config`}>
+            <Card className="cursor-pointer hover:border-zinc-400 dark:hover:border-zinc-500 transition-colors h-full">
+              <div className="p-6 flex flex-col items-center justify-center text-center min-h-[160px]">
+                <div className="w-12 h-12 rounded-full bg-orange-50 dark:bg-orange-900/20 flex items-center justify-center mb-3">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="24"
+                    height="24"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="text-orange-600 dark:text-orange-400"
+                  >
+                    <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+                    <circle cx="12" cy="12" r="3" />
+                  </svg>
+                </div>
+                <h3 className="font-semibold text-zinc-900 dark:text-zinc-100">
+                  Workflow Configuration
+                </h3>
+                <p className="text-sm text-zinc-500 mt-1">
+                  API keys & webhooks
+                </p>
+              </div>
+            </Card>
+          </Link>
         </div>
       </main>
     </div>

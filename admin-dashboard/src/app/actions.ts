@@ -1048,3 +1048,207 @@ export async function uploadCustomerCompanies(
 
   return { success: true, rowCount: inserted };
 }
+
+// ============ SalesNav KoolKit Actions ============
+
+export type SalesNavKoolKitRow = {
+  matching_filters?: string;
+  linkedin_user_profile_urn?: string;
+  first_name?: string;
+  last_name?: string;
+  email?: string;
+  phone_number?: string;
+  profile_headline?: string;
+  profile_summary?: string;
+  job_title?: string;
+  job_description?: string;
+  job_started_on?: string;
+  linkedin_url_user_profile?: string;
+  location?: string;
+  company?: string;
+  linkedin_company_profile_urn?: string;
+  linkedin_url_company?: string;
+  company_website?: string;
+  company_description?: string;
+  company_headcount?: string;
+  company_industries?: string;
+  company_registered_address?: string;
+  [key: string]: string | undefined;
+};
+
+export type SalesNavKoolKitUpload = {
+  id: string;
+  upload_id: string;
+  uploaded_at: string;
+  row_count: number;
+};
+
+export async function getSalesNavKoolKitUploads(clientId: string): Promise<SalesNavKoolKitUpload[]> {
+  const { data, error } = await supabase
+    .from("client_salesnav_koolkit")
+    .select("upload_id, created_at")
+    .eq("client_id", clientId)
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    console.error("Error fetching SalesNav KoolKit uploads:", error);
+    return [];
+  }
+
+  // Group by upload_id and count rows
+  const uploadMap = new Map<string, { uploaded_at: string; count: number }>();
+  for (const row of data) {
+    const existing = uploadMap.get(row.upload_id);
+    if (existing) {
+      existing.count++;
+    } else {
+      uploadMap.set(row.upload_id, { uploaded_at: row.created_at, count: 1 });
+    }
+  }
+
+  return Array.from(uploadMap.entries()).map(([upload_id, info]) => ({
+    id: upload_id,
+    upload_id,
+    uploaded_at: info.uploaded_at,
+    row_count: info.count,
+  }));
+}
+
+export async function uploadSalesNavKoolKit(
+  clientId: string,
+  uploadId: string,
+  rows: SalesNavKoolKitRow[]
+): Promise<{ success: boolean; error?: string; rowCount?: number }> {
+  const records = rows.map((row) => ({
+    client_id: clientId,
+    upload_id: uploadId,
+    matching_filters: row.matching_filters || null,
+    linkedin_user_profile_urn: row.linkedin_user_profile_urn || null,
+    first_name: row.first_name || null,
+    last_name: row.last_name || null,
+    email: row.email || null,
+    phone_number: row.phone_number || null,
+    profile_headline: row.profile_headline || null,
+    profile_summary: row.profile_summary || null,
+    job_title: row.job_title || null,
+    job_description: row.job_description || null,
+    job_started_on: row.job_started_on || null,
+    linkedin_url_user_profile: row.linkedin_url_user_profile || null,
+    location: row.location || null,
+    company: row.company || null,
+    linkedin_company_profile_urn: row.linkedin_company_profile_urn || null,
+    linkedin_url_company: row.linkedin_url_company || null,
+    company_website: row.company_website || null,
+    company_description: row.company_description || null,
+    company_headcount: row.company_headcount || null,
+    company_industries: row.company_industries || null,
+    company_registered_address: row.company_registered_address || null,
+  }));
+
+  // Insert in batches of 500 to avoid payload limits
+  const BATCH_SIZE = 500;
+  let inserted = 0;
+
+  for (let i = 0; i < records.length; i += BATCH_SIZE) {
+    const batch = records.slice(i, i + BATCH_SIZE);
+    const { error } = await supabase.from("client_salesnav_koolkit").insert(batch);
+
+    if (error) {
+      console.error("Error inserting SalesNav KoolKit data:", error);
+      return { success: false, error: error.message };
+    }
+    inserted += batch.length;
+  }
+
+  return { success: true, rowCount: inserted };
+}
+
+// ============ CRM Data Upload Actions ============
+
+export type CrmDataRow = {
+  company_name?: string;
+  domain?: string;
+  company_linkedin_url?: string;
+  first_name?: string;
+  last_name?: string;
+  person_linkedin_url?: string;
+  work_email?: string;
+  mobile_phone?: string;
+  notes?: string;
+  [key: string]: string | undefined;
+};
+
+export type CrmDataUpload = {
+  id: string;
+  upload_id: string;
+  uploaded_at: string;
+  row_count: number;
+};
+
+export async function getCrmDataUploads(clientId: string): Promise<CrmDataUpload[]> {
+  const { data, error } = await supabase
+    .from("client_crm_data")
+    .select("upload_id, created_at")
+    .eq("client_id", clientId)
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    console.error("Error fetching CRM data uploads:", error);
+    return [];
+  }
+
+  // Group by upload_id and count rows
+  const uploadMap = new Map<string, { uploaded_at: string; count: number }>();
+  for (const row of data) {
+    const existing = uploadMap.get(row.upload_id);
+    if (existing) {
+      existing.count++;
+    } else {
+      uploadMap.set(row.upload_id, { uploaded_at: row.created_at, count: 1 });
+    }
+  }
+
+  return Array.from(uploadMap.entries()).map(([upload_id, info]) => ({
+    id: upload_id,
+    upload_id,
+    uploaded_at: info.uploaded_at,
+    row_count: info.count,
+  }));
+}
+
+export async function uploadCrmData(
+  clientId: string,
+  uploadId: string,
+  rows: CrmDataRow[]
+): Promise<{ success: boolean; error?: string; rowCount?: number }> {
+  const records = rows.map((row) => ({
+    client_id: clientId,
+    upload_id: uploadId,
+    company_name: row.company_name || null,
+    domain: row.domain || null,
+    company_linkedin_url: row.company_linkedin_url || null,
+    first_name: row.first_name || null,
+    last_name: row.last_name || null,
+    person_linkedin_url: row.person_linkedin_url || null,
+    work_email: row.work_email || null,
+    mobile_phone: row.mobile_phone || null,
+    notes: row.notes || null,
+  }));
+
+  // Insert in batches of 500 to avoid payload limits
+  const BATCH_SIZE = 500;
+  let inserted = 0;
+
+  for (let i = 0; i < records.length; i += BATCH_SIZE) {
+    const batch = records.slice(i, i + BATCH_SIZE);
+    const { error } = await supabase.from("client_crm_data").insert(batch);
+
+    if (error) {
+      console.error("Error inserting CRM data:", error);
+      return { success: false, error: error.message };
+    }
+    inserted += batch.length;
+  }
+
+  return { success: true, rowCount: inserted };
+}
