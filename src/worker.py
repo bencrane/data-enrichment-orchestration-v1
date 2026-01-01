@@ -765,6 +765,13 @@ def run_split_raw_apollo_scrape_data(item_id: str, workstream_slug: str | None =
         "person_id": str(person_id) if person_id else None,
     })
 
+    # Trigger orchestrator to advance to next step
+    batch_id = _get_batch_id(item_id)
+    if batch_id:
+        _trigger_orchestrator(batch_id)
+    else:
+        print(f"[SYNC] WARNING: Could not find batch_id for item {item_id[:8]}...")
+
     return {"success": True, "item_id": item_id, "company_id": str(company_id) if company_id else None, "person_id": str(person_id) if person_id else None}
 
 
@@ -1456,6 +1463,7 @@ def start_enrich_person_via_waterfall_in_clay(item_id: str, workstream_slug: str
     payload = {
         "item_id": item_id,  # For callback routing
         "person_id": person_id,
+        "company_id": person_data["company_id"],  # For callback context
         "person_first_name": person_data["person_first_name"],
         "person_last_name": person_data["person_last_name"],
         "full_name": person_data["full_name"],

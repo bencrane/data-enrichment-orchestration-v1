@@ -132,13 +132,24 @@ export default function CrmDataPastUploadsPage() {
                       key={upload.id}
                       className="flex items-center justify-between p-3 border border-zinc-200 dark:border-zinc-700 rounded-md hover:border-zinc-400 dark:hover:border-zinc-500 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors"
                     >
-                      <div>
-                        <p className="font-mono text-xs text-zinc-500 dark:text-zinc-400">
-                          {upload.upload_id.slice(0, 8)}...
-                        </p>
-                        <p className="text-sm text-zinc-700 dark:text-zinc-300">
-                          {upload.row_count} records
-                        </p>
+                      <div className="flex items-center gap-3">
+                        <span
+                          className={`px-2 py-0.5 text-xs font-medium rounded ${
+                            upload.file_type === "companies"
+                              ? "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300"
+                              : "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300"
+                          }`}
+                        >
+                          {upload.file_type === "companies" ? "Companies" : "People"}
+                        </span>
+                        <div>
+                          <p className="font-mono text-xs text-zinc-500 dark:text-zinc-400">
+                            {upload.upload_id.slice(0, 8)}...
+                          </p>
+                          <p className="text-sm text-zinc-700 dark:text-zinc-300">
+                            {upload.row_count} records
+                          </p>
+                        </div>
                       </div>
                       <div className="flex items-center gap-2">
                         <p className="text-sm text-zinc-500">

@@ -135,11 +135,12 @@ export default function UploadInspectorPage() {
         clientId,
         uploadId,
         Array.from(selectedRowIds),
-        activePipeline.steps
+        activePipeline.steps,
+        WORKSTREAM_SLUG
       );
     } else {
       // Launch with all rows
-      result = await startBatchFromUpload(clientId, uploadId, activePipeline.steps);
+      result = await startBatchFromUpload(clientId, uploadId, activePipeline.steps, WORKSTREAM_SLUG);
     }
 
     if (result.success) {

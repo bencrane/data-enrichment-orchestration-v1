@@ -105,7 +105,8 @@ export type BatchItem = {
 export async function createBatch(
   clientId: string,
   blueprint: string[],
-  items: BatchItem[]
+  items: BatchItem[],
+  workstreamSlug: string
 ): Promise<{ success: boolean; error?: string; batchId?: string }> {
   // 1. Create the batch
   const { data: batch, error: batchError } = await supabase
@@ -114,6 +115,7 @@ export async function createBatch(
       client_id: clientId,
       blueprint: blueprint,
       status: "PENDING",
+      workstream_slug: workstreamSlug,
     })
     .select()
     .single();
@@ -404,7 +406,8 @@ export type RawApolloRow = {
 export async function startBatchFromUpload(
   clientId: string,
   uploadId: string,
-  blueprint: string[]
+  blueprint: string[],
+  workstreamSlug: string
 ): Promise<{ success: boolean; error?: string; batchId?: string; itemCount?: number }> {
   // 1. Fetch all raw_apollo_data rows for this upload
   const { data: rawRows, error: fetchError } = await supabase
@@ -431,6 +434,7 @@ export async function startBatchFromUpload(
       client_id: clientId,
       blueprint: blueprint,
       status: "PENDING",
+      workstream_slug: workstreamSlug,
     });
 
   if (batchError) {
@@ -934,7 +938,8 @@ export async function startBatchFromSelectedRows(
   clientId: string,
   uploadId: string,
   rowIds: string[],
-  blueprint: string[]
+  blueprint: string[],
+  workstreamSlug: string
 ): Promise<{ success: boolean; error?: string; batchId?: string; itemCount?: number }> {
   if (!rowIds || rowIds.length === 0) {
     return { success: false, error: "No rows selected" };
@@ -966,6 +971,7 @@ export async function startBatchFromSelectedRows(
       client_id: clientId,
       blueprint: blueprint,
       status: "PENDING",
+      workstream_slug: workstreamSlug,
     });
 
   if (batchError) {
@@ -1353,37 +1359,65 @@ export type CrmDataUpload = {
   upload_id: string;
   uploaded_at: string;
   row_count: number;
+  file_type: "companies" | "people";
 };
 
 export async function getCrmDataUploads(clientId: string): Promise<CrmDataUpload[]> {
-  const { data, error } = await supabase
-    .from("client_crm_data")
-    .select("upload_id, created_at")
-    .eq("client_id", clientId)
-    .order("created_at", { ascending: false });
+  // Query both normalized tables
+  const [companiesResult, peopleResult] = await Promise.all([
+    supabase
+      .from("crm_data_normalized_companies")
+      .select("upload_id, created_at")
+      .eq("client_id", clientId),
+    supabase
+      .from("crm_data_normalized_people")
+      .select("upload_id, created_at")
+      .eq("client_id", clientId),
+  ]);
 
-  if (error) {
-    console.error("Error fetching CRM data uploads:", error);
-    return [];
+  if (companiesResult.error) {
+    console.error("Error fetching CRM companies uploads:", companiesResult.error);
+  }
+  if (peopleResult.error) {
+    console.error("Error fetching CRM people uploads:", peopleResult.error);
   }
 
+  const companiesData = companiesResult.data || [];
+  const peopleData = peopleResult.data || [];
+
   // Group by upload_id and count rows
-  const uploadMap = new Map<string, { uploaded_at: string; count: number }>();
-  for (const row of data) {
+  const uploadMap = new Map<string, { uploaded_at: string; count: number; file_type: "companies" | "people" }>();
+
+  for (const row of companiesData) {
     const existing = uploadMap.get(row.upload_id);
     if (existing) {
       existing.count++;
     } else {
-      uploadMap.set(row.upload_id, { uploaded_at: row.created_at, count: 1 });
+      uploadMap.set(row.upload_id, { uploaded_at: row.created_at, count: 1, file_type: "companies" });
     }
   }
 
-  return Array.from(uploadMap.entries()).map(([upload_id, info]) => ({
+  for (const row of peopleData) {
+    const existing = uploadMap.get(row.upload_id);
+    if (existing) {
+      existing.count++;
+    } else {
+      uploadMap.set(row.upload_id, { uploaded_at: row.created_at, count: 1, file_type: "people" });
+    }
+  }
+
+  // Sort by uploaded_at descending
+  const uploads = Array.from(uploadMap.entries()).map(([upload_id, info]) => ({
     id: upload_id,
     upload_id,
     uploaded_at: info.uploaded_at,
     row_count: info.count,
+    file_type: info.file_type,
   }));
+
+  uploads.sort((a, b) => new Date(b.uploaded_at).getTime() - new Date(a.uploaded_at).getTime());
+
+  return uploads;
 }
 
 export async function uploadCrmData(
