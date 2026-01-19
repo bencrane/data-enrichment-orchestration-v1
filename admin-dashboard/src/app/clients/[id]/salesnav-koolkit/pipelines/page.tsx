@@ -46,7 +46,7 @@ export default function SalesNavKoolKitPipelinesPage() {
       const [clientData, workflowsData, pipelinesData] = await Promise.all([
         getClientById(clientId),
         getWorkflows(),
-        getClientPipelines(clientId, "salesnav_koolkit"),
+        getClientPipelines(clientId),
       ]);
       setClient(clientData);
       setWorkflows(workflowsData);
@@ -107,7 +107,7 @@ export default function SalesNavKoolKitPipelinesPage() {
         steps: pipeline,
       });
       if (result.success) {
-        const newPipelines = await getClientPipelines(clientId, "salesnav_koolkit");
+        const newPipelines = await getClientPipelines(clientId);
         setSavedPipelines(newPipelines);
         resetPipelineForm();
       } else {
@@ -118,9 +118,9 @@ export default function SalesNavKoolKitPipelinesPage() {
         name: pipelineName.trim(),
         description: pipelineDescription.trim() || undefined,
         steps: pipeline,
-      }, "salesnav_koolkit");
+      });
       if (result.success) {
-        const newPipelines = await getClientPipelines(clientId, "salesnav_koolkit");
+        const newPipelines = await getClientPipelines(clientId);
         setSavedPipelines(newPipelines);
         resetPipelineForm();
       } else {
@@ -152,7 +152,7 @@ export default function SalesNavKoolKitPipelinesPage() {
 
     const result = await deletePipeline(pipelineId);
     if (result.success) {
-      const newPipelines = await getClientPipelines(clientId, "salesnav_koolkit");
+      const newPipelines = await getClientPipelines(clientId);
       setSavedPipelines(newPipelines);
       if (editingPipelineId === pipelineId) {
         resetPipelineForm();
@@ -319,11 +319,10 @@ export default function SalesNavKoolKitPipelinesPage() {
                             key={workflow.slug}
                             onClick={() => addWorkflowToPipeline(workflow.slug)}
                             disabled={isAdded}
-                            className={`w-full text-left p-3 rounded-md transition-colors ${
-                              isAdded
-                                ? "bg-zinc-100 dark:bg-zinc-800 opacity-50 cursor-not-allowed"
-                                : "hover:bg-purple-50 dark:hover:bg-purple-900/20 border border-transparent hover:border-purple-200 dark:hover:border-purple-800"
-                            }`}
+                            className={`w-full text-left p-3 rounded-md transition-colors ${isAdded
+                              ? "bg-zinc-100 dark:bg-zinc-800 opacity-50 cursor-not-allowed"
+                              : "hover:bg-purple-50 dark:hover:bg-purple-900/20 border border-transparent hover:border-purple-200 dark:hover:border-purple-800"
+                              }`}
                           >
                             <div className="flex items-center justify-between">
                               <div className="flex items-center gap-2">
@@ -331,11 +330,10 @@ export default function SalesNavKoolKitPipelinesPage() {
                                   {workflow.name}
                                 </span>
                                 <span
-                                  className={`px-1.5 py-0.5 rounded text-xs font-medium ${
-                                    workflow.type === "SYNC"
-                                      ? "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300"
-                                      : "bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300"
-                                  }`}
+                                  className={`px-1.5 py-0.5 rounded text-xs font-medium ${workflow.type === "SYNC"
+                                    ? "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300"
+                                    : "bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300"
+                                    }`}
                                 >
                                   {workflow.type}
                                 </span>
@@ -482,8 +480,8 @@ export default function SalesNavKoolKitPipelinesPage() {
                     {savingPipeline
                       ? "Saving..."
                       : editingPipelineId
-                      ? "Update Pipeline"
-                      : "Save Pipeline"
+                        ? "Update Pipeline"
+                        : "Save Pipeline"
                     }
                   </Button>
                 </div>

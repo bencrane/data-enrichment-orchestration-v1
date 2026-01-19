@@ -163,7 +163,7 @@ export default function CrmDataConfigPage() {
               className={`px-1.5 py-0.5 rounded text-xs font-medium ${
                 workflow.type === "SYNC"
                   ? "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300"
-                  : "bg-rose-100 text-rose-700 dark:bg-rose-900 dark:text-rose-300"
+                  : "bg-zinc-200 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-300"
               }`}
             >
               {workflow.type}

@@ -42,7 +42,7 @@ export default function SalesNavKoolKitConfigPage() {
       const [clientData, workflowsData, configsData] = await Promise.all([
         getClientById(clientId),
         getWorkflows(),
-        getClientWorkflowConfigs(clientId, "salesnav_koolkit"),
+        getClientWorkflowConfigs(clientId),
       ]);
       setClient(clientData);
       setWorkflows(workflowsData);
@@ -89,7 +89,7 @@ export default function SalesNavKoolKitConfigPage() {
     const result = await saveClientWorkflowConfig(clientId, editingWorkflowSlug, parsed, "salesnav_koolkit");
 
     if (result.success) {
-      const newConfigs = await getClientWorkflowConfigs(clientId, "salesnav_koolkit");
+      const newConfigs = await getClientWorkflowConfigs(clientId);
       setClientConfigs(newConfigs);
       closeConfigEditor();
     } else {
@@ -175,11 +175,10 @@ export default function SalesNavKoolKitConfigPage() {
                   return (
                     <div
                       key={workflow.slug}
-                      className={`p-4 border rounded-lg transition-colors ${
-                        isConfigured
-                          ? "border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-900/10"
-                          : "border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800"
-                      }`}
+                      className={`p-4 border rounded-lg transition-colors ${isConfigured
+                        ? "border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-900/10"
+                        : "border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800"
+                        }`}
                     >
                       <div className="flex items-start justify-between mb-2">
                         <div className="flex-1 min-w-0">
@@ -191,11 +190,10 @@ export default function SalesNavKoolKitConfigPage() {
                           </code>
                         </div>
                         <span
-                          className={`ml-2 px-2 py-0.5 rounded text-xs font-medium ${
-                            isConfigured
-                              ? "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300"
-                              : "bg-zinc-100 text-zinc-500 dark:bg-zinc-700 dark:text-zinc-400"
-                          }`}
+                          className={`ml-2 px-2 py-0.5 rounded text-xs font-medium ${isConfigured
+                            ? "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300"
+                            : "bg-zinc-100 text-zinc-500 dark:bg-zinc-700 dark:text-zinc-400"
+                            }`}
                         >
                           {isConfigured ? "Configured" : "Not Set"}
                         </span>

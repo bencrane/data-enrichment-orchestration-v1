@@ -14,16 +14,14 @@ import {
 } from "@/components/ui/card";
 import {
   getClientById,
-  uploadCrmNormalizedCompanies,
   uploadCrmNormalizedPeople,
   Client,
-  CrmNormalizedCompanyRow,
   CrmNormalizedPersonRow,
-  CrmDataFileType,
 } from "@/app/actions";
 
-// CSV header to snake_case mapping for Companies
-const COMPANY_HEADER_MAP: Record<string, keyof CrmNormalizedCompanyRow> = {
+// CSV header to snake_case mapping for People (includes company fields)
+const HEADER_MAP: Record<string, keyof CrmNormalizedPersonRow> = {
+  // Company fields
   "company name": "company_name",
   "company_name": "company_name",
   "companyname": "company_name",
@@ -40,21 +38,7 @@ const COMPANY_HEADER_MAP: Record<string, keyof CrmNormalizedCompanyRow> = {
   "company_linkedin_url": "company_linkedin_url",
   "company linkedin": "company_linkedin_url",
   "linkedin company url": "company_linkedin_url",
-};
-
-// CSV header to snake_case mapping for People
-const PEOPLE_HEADER_MAP: Record<string, keyof CrmNormalizedPersonRow> = {
-  "company name": "company_name",
-  "company_name": "company_name",
-  "companyname": "company_name",
-  "company": "company_name",
-  "domain": "domain",
-  "company domain": "domain",
-  "company_domain": "domain",
-  "website": "domain",
-  "company linkedin url": "company_linkedin_url",
-  "company_linkedin_url": "company_linkedin_url",
-  "company linkedin": "company_linkedin_url",
+  // Person fields
   "first name": "first_name",
   "first_name": "first_name",
   "firstname": "first_name",
@@ -89,23 +73,11 @@ function normalizeHeader(header: string): string {
   return header.toLowerCase().trim();
 }
 
-function mapCompanyCsvRow(row: Record<string, string>): CrmNormalizedCompanyRow {
-  const mapped: CrmNormalizedCompanyRow = {};
-  for (const [key, value] of Object.entries(row)) {
-    const normalizedKey = normalizeHeader(key);
-    const mappedKey = COMPANY_HEADER_MAP[normalizedKey];
-    if (mappedKey && value) {
-      mapped[mappedKey] = value;
-    }
-  }
-  return mapped;
-}
-
-function mapPeopleCsvRow(row: Record<string, string>): CrmNormalizedPersonRow {
+function mapCsvRow(row: Record<string, string>): CrmNormalizedPersonRow {
   const mapped: CrmNormalizedPersonRow = {};
   for (const [key, value] of Object.entries(row)) {
     const normalizedKey = normalizeHeader(key);
-    const mappedKey = PEOPLE_HEADER_MAP[normalizedKey];
+    const mappedKey = HEADER_MAP[normalizedKey];
     if (mappedKey && value) {
       mapped[mappedKey] = value;
     }
@@ -121,11 +93,9 @@ export default function CrmDataUploadPage() {
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [dragActive, setDragActive] = useState(false);
-  const [fileType, setFileType] = useState<CrmDataFileType>("companies");
-  const [parsedCompanyRows, setParsedCompanyRows] = useState<CrmNormalizedCompanyRow[]>([]);
-  const [parsedPeopleRows, setParsedPeopleRows] = useState<CrmNormalizedPersonRow[]>([]);
+  const [parsedRows, setParsedRows] = useState<CrmNormalizedPersonRow[]>([]);
   const [parseError, setParseError] = useState<string | null>(null);
-  const [uploadResult, setUploadResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [uploadResult, setUploadResult] = useState<{ success: boolean; message: string; uploadId?: string } | null>(null);
 
   useEffect(() => {
     async function fetchData() {
@@ -139,8 +109,7 @@ export default function CrmDataUploadPage() {
 
   const handleFile = useCallback((file: File) => {
     setParseError(null);
-    setParsedCompanyRows([]);
-    setParsedPeopleRows([]);
+    setParsedRows([]);
     setUploadResult(null);
 
     if (!file.name.endsWith(".csv")) {
@@ -161,31 +130,21 @@ export default function CrmDataUploadPage() {
           return;
         }
 
-        if (fileType === "companies") {
-          const rows = result.data.map(mapCompanyCsvRow);
-          const validRows = rows.filter((r) => r.company_name || r.domain);
-          if (validRows.length === 0) {
-            setParseError("No valid rows found. Ensure CSV has company_name or domain columns.");
-            return;
-          }
-          setParsedCompanyRows(validRows);
-        } else {
-          const rows = result.data.map(mapPeopleCsvRow);
-          const validRows = rows.filter((r) =>
-            r.first_name || r.last_name || r.full_name || r.email || r.company_name
-          );
-          if (validRows.length === 0) {
-            setParseError("No valid rows found. Ensure CSV has name, email, or company columns.");
-            return;
-          }
-          setParsedPeopleRows(validRows);
+        const rows = result.data.map(mapCsvRow);
+        const validRows = rows.filter((r) =>
+          (r.first_name || r.last_name || r.full_name || r.email) && (r.company_name || r.domain)
+        );
+        if (validRows.length === 0) {
+          setParseError("No valid rows found. Each row needs person info (name/email) AND company info (company_name/domain).");
+          return;
         }
+        setParsedRows(validRows);
       },
       error: (error) => {
         setParseError(`Failed to parse CSV: ${error.message}`);
       },
     });
-  }, [fileType]);
+  }, []);
 
   const handleDrag = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -219,39 +178,27 @@ export default function CrmDataUploadPage() {
   );
 
   function clearFile() {
-    setParsedCompanyRows([]);
-    setParsedPeopleRows([]);
+    setParsedRows([]);
     setParseError(null);
     setUploadResult(null);
     const fileInput = document.getElementById("file-input") as HTMLInputElement;
     if (fileInput) fileInput.value = "";
   }
 
-  function handleFileTypeChange(newType: CrmDataFileType) {
-    setFileType(newType);
-    clearFile();
-  }
-
   async function handleUpload() {
-    const rowCount = fileType === "companies" ? parsedCompanyRows.length : parsedPeopleRows.length;
-    if (rowCount === 0) return;
+    if (parsedRows.length === 0) return;
 
     setUploading(true);
     setUploadResult(null);
 
     const uploadId = crypto.randomUUID();
-
-    let result;
-    if (fileType === "companies") {
-      result = await uploadCrmNormalizedCompanies(clientId, uploadId, parsedCompanyRows);
-    } else {
-      result = await uploadCrmNormalizedPeople(clientId, uploadId, parsedPeopleRows);
-    }
+    const result = await uploadCrmNormalizedPeople(clientId, uploadId, parsedRows);
 
     if (result.success) {
       setUploadResult({
         success: true,
-        message: `Upload Success: ${result.rowCount} ${fileType} records added.`,
+        message: `Upload Success: ${result.rowCount} contacts and ${result.companyCount} companies imported.`,
+        uploadId,
       });
       clearFile();
     } else {
@@ -280,8 +227,12 @@ export default function CrmDataUploadPage() {
     );
   }
 
-  const hasRows = fileType === "companies" ? parsedCompanyRows.length > 0 : parsedPeopleRows.length > 0;
-  const rowCount = fileType === "companies" ? parsedCompanyRows.length : parsedPeopleRows.length;
+  const hasRows = parsedRows.length > 0;
+  const rowCount = parsedRows.length;
+  
+  // Count unique companies
+  const uniqueDomains = new Set(parsedRows.map(r => r.domain?.toLowerCase().trim()).filter(Boolean));
+  const uniqueCompanyCount = uniqueDomains.size;
 
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950">
@@ -323,112 +274,12 @@ export default function CrmDataUploadPage() {
         <div className="max-w-2xl mx-auto">
           <Card>
             <CardHeader>
-              <CardTitle>Select Data Type</CardTitle>
+              <CardTitle>Upload CRM Contacts</CardTitle>
               <CardDescription>
-                Choose which type of CRM data you are uploading
+                Upload a CSV with contact and company information. Companies will be automatically deduplicated by domain.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              {/* File Type Selector */}
-              <div className="grid grid-cols-2 gap-4">
-                <button
-                  onClick={() => handleFileTypeChange("companies")}
-                  className={`p-4 border-2 rounded-lg text-left transition-colors ${
-                    fileType === "companies"
-                      ? "border-rose-500 bg-rose-50 dark:bg-rose-900/20"
-                      : "border-zinc-200 dark:border-zinc-700 hover:border-zinc-300 dark:hover:border-zinc-600"
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                      fileType === "companies"
-                        ? "bg-rose-100 dark:bg-rose-900"
-                        : "bg-zinc-100 dark:bg-zinc-800"
-                    }`}>
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        width="20"
-                        height="20"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        className={fileType === "companies" ? "text-rose-600" : "text-zinc-500"}
-                      >
-                        <path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z" />
-                        <path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2" />
-                        <path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2" />
-                        <path d="M10 6h4" />
-                        <path d="M10 10h4" />
-                        <path d="M10 14h4" />
-                        <path d="M10 18h4" />
-                      </svg>
-                    </div>
-                    <div>
-                      <p className={`font-medium ${
-                        fileType === "companies"
-                          ? "text-rose-700 dark:text-rose-300"
-                          : "text-zinc-700 dark:text-zinc-300"
-                      }`}>
-                        Companies
-                      </p>
-                      <p className="text-xs text-zinc-500">
-                        Company records only
-                      </p>
-                    </div>
-                  </div>
-                </button>
-
-                <button
-                  onClick={() => handleFileTypeChange("people")}
-                  className={`p-4 border-2 rounded-lg text-left transition-colors ${
-                    fileType === "people"
-                      ? "border-rose-500 bg-rose-50 dark:bg-rose-900/20"
-                      : "border-zinc-200 dark:border-zinc-700 hover:border-zinc-300 dark:hover:border-zinc-600"
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                      fileType === "people"
-                        ? "bg-rose-100 dark:bg-rose-900"
-                        : "bg-zinc-100 dark:bg-zinc-800"
-                    }`}>
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        width="20"
-                        height="20"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        className={fileType === "people" ? "text-rose-600" : "text-zinc-500"}
-                      >
-                        <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-                        <circle cx="9" cy="7" r="4" />
-                        <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
-                        <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-                      </svg>
-                    </div>
-                    <div>
-                      <p className={`font-medium ${
-                        fileType === "people"
-                          ? "text-rose-700 dark:text-rose-300"
-                          : "text-zinc-700 dark:text-zinc-300"
-                      }`}>
-                        People
-                      </p>
-                      <p className="text-xs text-zinc-500">
-                        Contact/person records
-                      </p>
-                    </div>
-                  </div>
-                </button>
-              </div>
-
               {/* Drag & Drop Zone */}
               <div
                 onDragEnter={handleDrag}
@@ -466,7 +317,7 @@ export default function CrmDataUploadPage() {
                   <line x1="12" x2="12" y1="3" y2="15" />
                 </svg>
                 <p className="text-zinc-600 dark:text-zinc-400">
-                  Drop your {fileType === "companies" ? "Companies" : "People"} CSV here
+                  Drop your CRM contacts CSV here
                 </p>
                 <p className="text-sm text-zinc-400 dark:text-zinc-500 mt-1">
                   or click to browse
@@ -482,9 +333,14 @@ export default function CrmDataUploadPage() {
               {hasRows && (
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <p className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                      Ready to upload: {rowCount} {fileType} records
-                    </p>
+                    <div>
+                      <p className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                        Ready to upload: {rowCount} contacts
+                      </p>
+                      <p className="text-xs text-zinc-500">
+                        {uniqueCompanyCount} unique companies will be created/linked
+                      </p>
+                    </div>
                     <button
                       type="button"
                       onClick={clearFile}
@@ -509,76 +365,41 @@ export default function CrmDataUploadPage() {
                     </button>
                   </div>
 
-                  {/* Preview Table - Companies */}
-                  {fileType === "companies" && parsedCompanyRows.length > 0 && (
-                    <div className="overflow-x-auto border border-zinc-200 dark:border-zinc-700 rounded-md max-h-48">
-                      <table className="w-full text-xs">
-                        <thead className="bg-zinc-100 dark:bg-zinc-800 sticky top-0">
-                          <tr>
-                            <th className="text-left py-2 px-3">Company Name</th>
-                            <th className="text-left py-2 px-3">Domain</th>
-                            <th className="text-left py-2 px-3">LinkedIn URL</th>
+                  {/* Preview Table */}
+                  <div className="overflow-x-auto border border-zinc-200 dark:border-zinc-700 rounded-md max-h-48">
+                    <table className="w-full text-xs">
+                      <thead className="bg-zinc-100 dark:bg-zinc-800 sticky top-0">
+                        <tr>
+                          <th className="text-left py-2 px-3">Name</th>
+                          <th className="text-left py-2 px-3">Company</th>
+                          <th className="text-left py-2 px-3">Email</th>
+                          <th className="text-left py-2 px-3">Domain</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {parsedRows.slice(0, 5).map((row, i) => (
+                          <tr key={i} className="border-t border-zinc-200 dark:border-zinc-700">
+                            <td className="py-2 px-3">
+                              {row.full_name || [row.first_name, row.last_name].filter(Boolean).join(" ") || "-"}
+                            </td>
+                            <td className="py-2 px-3">{row.company_name || "-"}</td>
+                            <td className="py-2 px-3 font-mono text-xs">{row.email || "-"}</td>
+                            <td className="py-2 px-3">{row.domain || "-"}</td>
                           </tr>
-                        </thead>
-                        <tbody>
-                          {parsedCompanyRows.slice(0, 5).map((row, i) => (
-                            <tr key={i} className="border-t border-zinc-200 dark:border-zinc-700">
-                              <td className="py-2 px-3">{row.company_name || "-"}</td>
-                              <td className="py-2 px-3">{row.domain || "-"}</td>
-                              <td className="py-2 px-3 font-mono text-xs truncate max-w-[200px]">
-                                {row.company_linkedin_url || "-"}
-                              </td>
-                            </tr>
-                          ))}
-                          {parsedCompanyRows.length > 5 && (
-                            <tr className="border-t border-zinc-200 dark:border-zinc-700">
-                              <td colSpan={3} className="py-2 px-3 text-zinc-500 text-center">
-                                ... and {parsedCompanyRows.length - 5} more records
-                              </td>
-                            </tr>
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-
-                  {/* Preview Table - People */}
-                  {fileType === "people" && parsedPeopleRows.length > 0 && (
-                    <div className="overflow-x-auto border border-zinc-200 dark:border-zinc-700 rounded-md max-h-48">
-                      <table className="w-full text-xs">
-                        <thead className="bg-zinc-100 dark:bg-zinc-800 sticky top-0">
-                          <tr>
-                            <th className="text-left py-2 px-3">Name</th>
-                            <th className="text-left py-2 px-3">Company</th>
-                            <th className="text-left py-2 px-3">Email</th>
-                            <th className="text-left py-2 px-3">Domain</th>
+                        ))}
+                        {parsedRows.length > 5 && (
+                          <tr className="border-t border-zinc-200 dark:border-zinc-700">
+                            <td colSpan={4} className="py-2 px-3 text-zinc-500 text-center">
+                              ... and {parsedRows.length - 5} more records
+                            </td>
                           </tr>
-                        </thead>
-                        <tbody>
-                          {parsedPeopleRows.slice(0, 5).map((row, i) => (
-                            <tr key={i} className="border-t border-zinc-200 dark:border-zinc-700">
-                              <td className="py-2 px-3">
-                                {row.full_name || [row.first_name, row.last_name].filter(Boolean).join(" ") || "-"}
-                              </td>
-                              <td className="py-2 px-3">{row.company_name || "-"}</td>
-                              <td className="py-2 px-3 font-mono text-xs">{row.email || "-"}</td>
-                              <td className="py-2 px-3">{row.domain || "-"}</td>
-                            </tr>
-                          ))}
-                          {parsedPeopleRows.length > 5 && (
-                            <tr className="border-t border-zinc-200 dark:border-zinc-700">
-                              <td colSpan={4} className="py-2 px-3 text-zinc-500 text-center">
-                                ... and {parsedPeopleRows.length - 5} more records
-                              </td>
-                            </tr>
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
 
                   <Button onClick={handleUpload} disabled={uploading} className="w-full">
-                    {uploading ? "Uploading..." : `Upload ${rowCount} ${fileType === "companies" ? "Companies" : "People"}`}
+                    {uploading ? "Uploading..." : `Upload ${rowCount} Contacts`}
                   </Button>
                 </div>
               )}
@@ -605,23 +426,29 @@ export default function CrmDataUploadPage() {
 
               {/* Expected Columns Info */}
               <div className="text-sm text-zinc-500 border-t border-zinc-200 dark:border-zinc-700 pt-4 mt-4">
-                <p className="font-medium mb-2">
-                  Expected CSV columns for {fileType === "companies" ? "Companies" : "People"}:
+                <p className="font-medium mb-2">Expected CSV columns:</p>
+                <div className="grid grid-cols-2 gap-4 text-xs">
+                  <div>
+                    <p className="text-zinc-600 dark:text-zinc-400 font-medium mb-1">Person (required at least one):</p>
+                    <ul className="list-disc list-inside space-y-0.5 text-zinc-400">
+                      <li>first_name, last_name, full_name</li>
+                      <li>email</li>
+                      <li>mobile_phone</li>
+                      <li>person_linkedin_url</li>
+                    </ul>
+                  </div>
+                  <div>
+                    <p className="text-zinc-600 dark:text-zinc-400 font-medium mb-1">Company (required at least one):</p>
+                    <ul className="list-disc list-inside space-y-0.5 text-zinc-400">
+                      <li>company_name</li>
+                      <li>domain</li>
+                      <li>company_linkedin_url</li>
+                    </ul>
+                  </div>
+                </div>
+                <p className="text-xs text-zinc-400 mt-3">
+                  Companies are automatically deduplicated by domain.
                 </p>
-                {fileType === "companies" ? (
-                  <ul className="list-disc list-inside space-y-1 text-zinc-400 text-xs">
-                    <li>company_name</li>
-                    <li>domain</li>
-                    <li>company_linkedin_url</li>
-                  </ul>
-                ) : (
-                  <ul className="list-disc list-inside space-y-1 text-zinc-400 text-xs">
-                    <li>company_name, domain, company_linkedin_url</li>
-                    <li>first_name, last_name, full_name</li>
-                    <li>person_linkedin_url</li>
-                    <li>email, mobile_phone</li>
-                  </ul>
-                )}
               </div>
             </CardContent>
           </Card>

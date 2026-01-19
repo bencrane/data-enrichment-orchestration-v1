@@ -159,7 +159,7 @@ export default function CustomerCompaniesConfigPage() {
               className={`px-2 py-0.5 rounded text-xs font-medium ${
                 workflow.type === "SYNC"
                   ? "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300"
-                  : "bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300"
+                  : "bg-zinc-200 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-300"
               }`}
             >
               {workflow.type}

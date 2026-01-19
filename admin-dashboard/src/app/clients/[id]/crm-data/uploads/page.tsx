@@ -128,35 +128,39 @@ export default function CrmDataPastUploadsPage() {
               ) : (
                 <div className="space-y-2">
                   {uploads.map((upload) => (
-                    <div
+                    <Link
                       key={upload.id}
+                      href={`/clients/${clientId}/crm-data/uploads/${upload.upload_id}`}
                       className="flex items-center justify-between p-3 border border-zinc-200 dark:border-zinc-700 rounded-md hover:border-zinc-400 dark:hover:border-zinc-500 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors"
                     >
-                      <div className="flex items-center gap-3">
-                        <span
-                          className={`px-2 py-0.5 text-xs font-medium rounded ${
-                            upload.file_type === "companies"
-                              ? "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300"
-                              : "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300"
-                          }`}
-                        >
-                          {upload.file_type === "companies" ? "Companies" : "People"}
-                        </span>
-                        <div>
-                          <p className="font-mono text-xs text-zinc-500 dark:text-zinc-400">
-                            {upload.upload_id.slice(0, 8)}...
-                          </p>
-                          <p className="text-sm text-zinc-700 dark:text-zinc-300">
-                            {upload.row_count} records
-                          </p>
-                        </div>
+                      <div>
+                        <p className="font-mono text-xs text-zinc-500 dark:text-zinc-400">
+                          {upload.upload_id.slice(0, 8)}...
+                        </p>
+                        <p className="text-sm text-zinc-700 dark:text-zinc-300">
+                          {upload.row_count} contacts
+                        </p>
                       </div>
                       <div className="flex items-center gap-2">
                         <p className="text-sm text-zinc-500">
                           {new Date(upload.uploaded_at).toLocaleString()}
                         </p>
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          width="16"
+                          height="16"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          className="text-zinc-400"
+                        >
+                          <path d="m9 18 6-6-6-6" />
+                        </svg>
                       </div>
-                    </div>
+                    </Link>
                   ))}
                 </div>
               )}

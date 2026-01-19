@@ -1,6 +1,8 @@
 "use server";
 
-import { supabase, ColumnInfo } from "@/lib/supabase";
+import { supabase, warehouseSupabase, ColumnInfo } from "@/lib/supabase";
+import { v4 as uuidv4 } from "uuid";
+import Papa from "papaparse";
 
 export async function getTableSchema(tableName: string): Promise<ColumnInfo[]> {
   const { data, error } = await supabase.rpc("get_table_columns", {
@@ -1420,6 +1422,77 @@ export async function getCrmDataUploads(clientId: string): Promise<CrmDataUpload
   return uploads;
 }
 
+export type CrmUploadDetails = {
+  upload_id: string;
+  uploaded_at: string;
+  row_count: number;
+  company_count: number;
+  rows: {
+    id: string;
+    first_name?: string;
+    last_name?: string;
+    full_name?: string;
+    company_name?: string;
+    domain?: string;
+    email?: string;
+    mobile_phone?: string;
+  }[];
+};
+
+export async function getCrmUploadDetails(
+  clientId: string,
+  uploadId: string,
+  limit: number = 500
+): Promise<CrmUploadDetails | null> {
+  const { data, error } = await supabase
+    .from("crm_data_normalized_people")
+    .select("id, first_name, last_name, full_name, company_name, domain, email, mobile_phone, created_at")
+    .eq("client_id", clientId)
+    .eq("upload_id", uploadId)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  if (error) {
+    console.error("Error fetching CRM upload details:", error);
+    return null;
+  }
+
+  if (!data || data.length === 0) {
+    return null;
+  }
+
+  // Count unique companies
+  const { count: companyCount } = await supabase
+    .from("crm_data_normalized_companies")
+    .select("id", { count: "exact", head: true })
+    .eq("client_id", clientId)
+    .eq("upload_id", uploadId);
+
+  // Get total row count
+  const { count: totalCount } = await supabase
+    .from("crm_data_normalized_people")
+    .select("id", { count: "exact", head: true })
+    .eq("client_id", clientId)
+    .eq("upload_id", uploadId);
+
+  return {
+    upload_id: uploadId,
+    uploaded_at: data[0].created_at,
+    row_count: totalCount || data.length,
+    company_count: companyCount || 0,
+    rows: data.map((row) => ({
+      id: row.id,
+      first_name: row.first_name,
+      last_name: row.last_name,
+      full_name: row.full_name,
+      company_name: row.company_name,
+      domain: row.domain,
+      email: row.email,
+      mobile_phone: row.mobile_phone,
+    })),
+  };
+}
+
 export async function uploadCrmData(
   clientId: string,
   uploadId: string,
@@ -1514,37 +1587,211 @@ export async function uploadCrmNormalizedPeople(
   clientId: string,
   uploadId: string,
   rows: CrmNormalizedPersonRow[]
-): Promise<{ success: boolean; error?: string; rowCount?: number }> {
-  const records = rows.map((row) => ({
-    client_id: clientId,
-    upload_id: uploadId,
-    company_name: row.company_name || null,
-    domain: row.domain || null,
-    company_linkedin_url: row.company_linkedin_url || null,
-    first_name: row.first_name || null,
-    last_name: row.last_name || null,
-    full_name: row.full_name || null,
-    person_linkedin_url: row.person_linkedin_url || null,
-    email: row.email || null,
-    mobile_phone: row.mobile_phone || null,
-  }));
+): Promise<{ success: boolean; error?: string; rowCount?: number; companyCount?: number }> {
+  
+  // Step 1: Dedupe and upsert companies
+  const companyMap = new Map<string, string>(); // domain -> company_id
+  const uniqueCompanies: { domain: string; company_name?: string; company_linkedin_url?: string }[] = [];
 
-  // Insert in batches of 500 to avoid payload limits
-  const BATCH_SIZE = 500;
-  let inserted = 0;
-
-  for (let i = 0; i < records.length; i += BATCH_SIZE) {
-    const batch = records.slice(i, i + BATCH_SIZE);
-    const { error } = await supabase.from("crm_data_normalized_people").insert(batch);
-
-    if (error) {
-      console.error("Error inserting CRM normalized people:", error);
-      return { success: false, error: error.message };
+  for (const row of rows) {
+    const domain = row.domain?.toLowerCase().trim();
+    if (domain && !companyMap.has(domain)) {
+      companyMap.set(domain, ""); // placeholder
+      uniqueCompanies.push({
+        domain,
+        company_name: row.company_name,
+        company_linkedin_url: row.company_linkedin_url,
+      });
     }
-    inserted += batch.length;
   }
 
-  return { success: true, rowCount: inserted };
+  console.log(`[CRM Upload] Found ${uniqueCompanies.length} unique companies`);
+
+  // Upsert companies
+  for (const company of uniqueCompanies) {
+    // Check if company already exists for this client
+    const { data: existing } = await supabase
+      .from("crm_data_normalized_companies")
+      .select("id")
+      .eq("client_id", clientId)
+      .eq("domain", company.domain)
+      .single();
+
+    let companyId: string;
+
+    if (existing) {
+      companyId = existing.id;
+    } else {
+      const { data: inserted, error: insertError } = await supabase
+        .from("crm_data_normalized_companies")
+        .insert({
+          client_id: clientId,
+          upload_id: uploadId,
+          company_name: company.company_name || null,
+          domain: company.domain,
+          company_linkedin_url: company.company_linkedin_url || null,
+        })
+        .select("id")
+        .single();
+
+      if (insertError) {
+        console.error(`[CRM Upload] Error inserting company ${company.domain}:`, insertError);
+        continue;
+      }
+      companyId = inserted.id;
+    }
+    companyMap.set(company.domain, companyId);
+  }
+
+  // Step 2: Insert people (with company_id link)
+  let inserted = 0;
+
+  for (const row of rows) {
+    const domain = row.domain?.toLowerCase().trim();
+    const companyId = domain ? companyMap.get(domain) : null;
+
+    const { error: personError } = await supabase
+      .from("crm_data_normalized_people")
+      .insert({
+        client_id: clientId,
+        upload_id: uploadId,
+        company_id: companyId || null,
+        company_name: row.company_name || null,
+        domain: row.domain || null,
+        company_linkedin_url: row.company_linkedin_url || null,
+        first_name: row.first_name || null,
+        last_name: row.last_name || null,
+        full_name: row.full_name || `${row.first_name || ""} ${row.last_name || ""}`.trim() || null,
+        person_linkedin_url: row.person_linkedin_url || null,
+        email: row.email || null,
+        mobile_phone: row.mobile_phone || null,
+      });
+
+    if (personError) {
+      console.error(`[CRM Upload] Error inserting person:`, personError);
+      continue;
+    }
+    inserted++;
+  }
+
+  console.log(`[CRM Upload] Inserted ${inserted} people, ${uniqueCompanies.length} companies`);
+
+  return { success: true, rowCount: inserted, companyCount: uniqueCompanies.length };
+}
+
+// Start a CRM enrichment batch from an upload
+export async function startCrmBatchFromUpload(
+  clientId: string,
+  uploadId: string,
+  blueprint: string[]
+): Promise<{ success: boolean; error?: string; batchId?: string; itemCount?: number }> {
+  
+  // 1. Fetch all crm_data_normalized_people rows for this upload
+  const { data: peopleRows, error: fetchError } = await supabase
+    .from("crm_data_normalized_people")
+    .select("id, company_id, company_name, domain, company_linkedin_url, first_name, last_name, person_linkedin_url")
+    .eq("client_id", clientId)
+    .eq("upload_id", uploadId);
+
+  if (fetchError) {
+    console.error("Error fetching CRM people data:", fetchError);
+    return { success: false, error: fetchError.message };
+  }
+
+  if (!peopleRows || peopleRows.length === 0) {
+    return { success: false, error: "No data found for this upload" };
+  }
+
+  // 2. Create the batch (INITIALIZING first)
+  const { data: batchData, error: batchError } = await supabase
+    .from("batches")
+    .insert({
+      client_id: clientId,
+      status: "INITIALIZING",
+      blueprint: blueprint,
+      workstream_slug: "crm_data",
+    })
+    .select("id")
+    .single();
+
+  if (batchError || !batchData) {
+    console.error("Error creating batch:", batchError);
+    return { success: false, error: batchError?.message || "Failed to create batch" };
+  }
+
+  const batchId = batchData.id;
+  console.log(`[CRM Batch] Created batch: ${batchId}`);
+
+  // 3. Create batch_items and workflow_states for each person
+  let itemCount = 0;
+
+  for (const person of peopleRows) {
+    // Create batch_item
+    const { data: batchItemData, error: batchItemError } = await supabase
+      .from("batch_items")
+      .insert({
+        batch_id: batchId,
+        raw_data: {
+          person_id: person.id,
+          company_id: person.company_id,
+          source: "crm_upload",
+          upload_id: uploadId,
+        },
+        company_name: person.company_name || null,
+        company_domain: person.domain || null,
+        company_linkedin_url: person.company_linkedin_url || null,
+        person_first_name: person.first_name || null,
+        person_last_name: person.last_name || null,
+        person_linkedin_url: person.person_linkedin_url || null,
+      })
+      .select("id")
+      .single();
+
+    if (batchItemError || !batchItemData) {
+      console.error("Error creating batch_item:", batchItemError);
+      continue;
+    }
+
+    const batchItemId = batchItemData.id;
+
+    // Link person to batch_item
+    await supabase
+      .from("crm_data_normalized_people")
+      .update({ batch_item_id: batchItemId })
+      .eq("id", person.id);
+
+    // Create workflow_state for first step
+    const { error: wsError } = await supabase
+      .from("workflow_states")
+      .insert({
+        batch_id: batchId,
+        item_id: batchItemId,
+        step_name: blueprint[0],
+        status: "PENDING",
+      });
+
+    if (wsError) {
+      console.error("Error creating workflow_state:", wsError);
+      continue;
+    }
+
+    itemCount++;
+  }
+
+  // 4. Update batch status to PENDING (triggers orchestrator)
+  const { error: updateError } = await supabase
+    .from("batches")
+    .update({ status: "PENDING" })
+    .eq("id", batchId);
+
+  if (updateError) {
+    console.error("Error updating batch status:", updateError);
+    return { success: false, error: "Failed to activate batch" };
+  }
+
+  console.log(`[CRM Batch] Batch ${batchId} set to PENDING with ${itemCount} items`);
+
+  return { success: true, batchId, itemCount };
 }
 
 // ============ Data Ingestion Workstreams Actions ============
@@ -1664,4 +1911,626 @@ export async function deleteDataIngestionWorkstream(
     return { success: false, error: error.message };
   }
   return { success: true };
+}
+
+// ============ Global Ingest - SalesNav Actions ============
+
+type SalesNavRow = {
+  matching_filters?: string;
+  linkedin_user_profile_urn?: string;
+  first_name?: string;
+  last_name?: string;
+  email?: string;
+  phone_number?: string;
+  profile_headline?: string;
+  profile_summary?: string;
+  job_title?: string;
+  job_description?: string;
+  job_started_on?: string;
+  linkedin_url_user_profile?: string;
+  location?: string;
+  company?: string;
+  linkedin_company_profile_urn?: string;
+  linkedin_url_company?: string;
+  company_website?: string;
+  company_description?: string;
+  company_headcount?: string;
+  company_industries?: string;
+  company_registered_address?: string;
+};
+
+export async function uploadSalesNavToWarehouse(
+  csvContent: string,
+  exportTitle: string | null,
+  exportTimestamp: string | null,
+  notes: string | null
+): Promise<{ success: boolean; error?: string; upload_id?: string; rows_inserted?: number }> {
+  if (!warehouseSupabase) {
+    return { success: false, error: "Warehouse database not configured" };
+  }
+
+  const uploadId = uuidv4();
+
+  // Parse export timestamp - supports "12/26/2025, 5:55 PM" format
+  let parsedTimestamp: string | null = null;
+  if (exportTimestamp) {
+    try {
+      // Try US format: "12/26/2025, 5:55 PM"
+      const match = exportTimestamp.match(/(\d{1,2})\/(\d{1,2})\/(\d{4}),?\s*(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+      if (match) {
+        const [, month, day, year, hours, minutes, ampm] = match;
+        let hour = parseInt(hours);
+        if (ampm.toUpperCase() === "PM" && hour !== 12) hour += 12;
+        if (ampm.toUpperCase() === "AM" && hour === 12) hour = 0;
+        parsedTimestamp = new Date(
+          parseInt(year),
+          parseInt(month) - 1,
+          parseInt(day),
+          hour,
+          parseInt(minutes)
+        ).toISOString();
+      } else {
+        // Try ISO format
+        parsedTimestamp = new Date(exportTimestamp).toISOString();
+      }
+    } catch {
+      parsedTimestamp = null;
+    }
+  }
+
+  // Parse CSV using papaparse
+  const parsed = Papa.parse(csvContent, {
+    header: true,
+    skipEmptyLines: true,
+    transformHeader: (h: string) => h.trim().toLowerCase(),
+  });
+
+  if (parsed.errors.length > 0 && parsed.data.length === 0) {
+    return { success: false, error: `CSV parse error: ${parsed.errors[0]?.message}` };
+  }
+
+  const csvRows = parsed.data as Record<string, string>[];
+  if (csvRows.length === 0) {
+    return { success: false, error: "CSV has no data rows" };
+  }
+
+  // Map CSV headers to DB columns
+  const headerMapping: Record<string, keyof SalesNavRow> = {
+    "matching filters": "matching_filters",
+    "linkedin user profile urn": "linkedin_user_profile_urn",
+    "first name": "first_name",
+    "last name": "last_name",
+    "email": "email",
+    "phone number": "phone_number",
+    "profile headline": "profile_headline",
+    "profile summary": "profile_summary",
+    "job title": "job_title",
+    "job description": "job_description",
+    "job started on": "job_started_on",
+    "linkedin url (user profile)": "linkedin_url_user_profile",
+    "location": "location",
+    "company": "company",
+    "linkedin company profile urn": "linkedin_company_profile_urn",
+    "linkedin url (company)": "linkedin_url_company",
+    "company website": "company_website",
+    "company description": "company_description",
+    "company headcount": "company_headcount",
+    "company industries": "company_industries",
+    "company registered address": "company_registered_address",
+  };
+
+  // Build rows for insert
+  const rows: Record<string, unknown>[] = [];
+  for (const csvRow of csvRows) {
+    const row: Record<string, unknown> = {
+      upload_id: uploadId,
+      export_title: exportTitle || null,
+      export_timestamp: parsedTimestamp,
+      notes: notes || null,
+    };
+
+    for (const [csvHeader, dbColumn] of Object.entries(headerMapping)) {
+      const value = csvRow[csvHeader]?.trim();
+      if (dbColumn === "matching_filters") {
+        row[dbColumn] = value?.toUpperCase() === "TRUE" ? true : value?.toUpperCase() === "FALSE" ? false : null;
+      } else {
+        row[dbColumn] = value || null;
+      }
+    }
+
+    rows.push(row);
+  }
+
+  // Insert in batches
+  const batchSize = 500;
+  let totalInserted = 0;
+
+  for (let i = 0; i < rows.length; i += batchSize) {
+    const batch = rows.slice(i, i + batchSize);
+    const { error } = await warehouseSupabase
+      .schema("raw")
+      .from("salesnav_scrapes")
+      .insert(batch);
+
+    if (error) {
+      console.error("Error inserting batch:", error);
+      return { success: false, error: `Insert error at row ${i}: ${error.message}` };
+    }
+    totalInserted += batch.length;
+  }
+
+  return { success: true, upload_id: uploadId, rows_inserted: totalInserted };
+}
+
+// ============ Global Ingest - VC Portfolio Actions ============
+
+type VcFirm = {
+  id: string;
+  name: string;
+  domain: string;
+};
+
+export async function getVcFirms(): Promise<VcFirm[]> {
+  if (!warehouseSupabase) {
+    return [];
+  }
+
+  const { data, error } = await warehouseSupabase
+    .schema("raw")
+    .from("vc_firms")
+    .select("id, name, domain")
+    .order("name");
+
+  if (error) {
+    console.error("Error fetching VC firms:", error);
+    return [];
+  }
+
+  return data || [];
+}
+
+export async function uploadVcPortfolioCompanies(
+  csvContent: string,
+  vcFirmId: string
+): Promise<{ success: boolean; error?: string; upload_id?: string; rows_inserted?: number }> {
+  if (!warehouseSupabase) {
+    return { success: false, error: "Warehouse database not configured" };
+  }
+
+  const uploadId = uuidv4();
+
+  // Parse CSV using papaparse
+  const parsed = Papa.parse(csvContent, {
+    header: true,
+    skipEmptyLines: true,
+  });
+
+  if (parsed.errors.length > 0 && parsed.data.length === 0) {
+    return { success: false, error: `CSV parse error: ${parsed.errors[0]?.message}` };
+  }
+
+  const csvRows = parsed.data as Record<string, string>[];
+  if (csvRows.length === 0) {
+    return { success: false, error: "CSV has no data rows" };
+  }
+
+  // Map messy Crunchbase headers to clean columns by index position
+  // Headers are: component--field-formatter, component--field-formatter href, etc.
+  const headers = Object.keys(csvRows[0]);
+  
+  // Build rows for insert
+  const rows: Record<string, unknown>[] = [];
+  for (const csvRow of csvRows) {
+    const values = Object.values(csvRow);
+    
+    // Extract categories (columns 27, 29, 31, 33 - accent 4, 5, 6, 7)
+    const categories: string[] = [];
+    [27, 29, 31, 33].forEach(idx => {
+      const val = values[idx]?.trim();
+      if (val && val !== "," && val !== ",,,," && val !== ",,,,") {
+        categories.push(val);
+      }
+    });
+
+    // Extract investors (columns 36, 38, 40, 42, 44 and beyond - accent 8, 9, 10, 11, 12)
+    const investors: string[] = [];
+    [36, 38, 40, 42, 44, 47, 49, 51, 53, 55].forEach(idx => {
+      const val = values[idx]?.trim();
+      if (val && val !== "," && val !== "—" && val !== ",,,," && !val.startsWith(",,")) {
+        investors.push(val);
+      }
+    });
+
+    const row: Record<string, unknown> = {
+      upload_id: uploadId,
+      vc_firm_id: vcFirmId,
+      website_domain: values[0]?.trim() || null,
+      crunchbase_url: values[2]?.trim() || null,
+      logo_url: values[3]?.trim() || null,
+      company_name: values[4]?.trim() || null,
+      status: values[5]?.trim() || null,
+      founded_date: values[6]?.trim() || null,
+      description_long: values[7]?.trim() || null,
+      description_short: values[8]?.trim() || null,
+      city: values[10]?.trim() || null,
+      state: values[12]?.trim() || null,
+      country: values[14]?.trim() || null,
+      employee_count: values[16]?.trim() || null,
+      linkedin_url: values[19]?.trim() || null,
+      revenue_range: values[20]?.trim() || null,
+      funding_total: values[22]?.trim() || null,
+      equity_funding: values[24]?.trim() || null,
+      categories: categories.length > 0 ? categories : null,
+      investors: investors.length > 0 ? investors : null,
+    };
+
+    rows.push(row);
+  }
+
+  // Insert in batches
+  const batchSize = 500;
+  let totalInserted = 0;
+
+  for (let i = 0; i < rows.length; i += batchSize) {
+    const batch = rows.slice(i, i + batchSize);
+    const { error } = await warehouseSupabase
+      .schema("raw")
+      .from("vc_portfolio_companies")
+      .insert(batch);
+
+    if (error) {
+      console.error("Error inserting batch:", error);
+      return { success: false, error: `Insert error at row ${i}: ${error.message}` };
+    }
+    totalInserted += batch.length;
+  }
+
+  return { success: true, upload_id: uploadId, rows_inserted: totalInserted };
+}
+
+// VCs with verified clean data (columns properly aligned)
+const CLEAN_VCS = new Set([
+  "Accel", "Andreessen Horowitz", "Battery Ventures", "Bessemer Venture Partners",
+  "Felicis", "First Round Capital", "Forerunner", "Foundation Capital",
+  "Founders Fund", "GGV Capital", "Greylock Partners", "Haystack",
+  "Khosla Ventures", "Lightspeed", "Pear VC", "Redpoint",
+  "Sequoia", "Slow Ventures", "SV Angel", "Tiger Global",
+  "Tribe Capital", "Uncork Capital", "USV"
+]);
+
+// VCs with malformed data (columns misaligned - URLs in city fields, etc)
+const BAD_VCS = new Set([
+  "Addition", "Altimeter", "Bedrock", "Benchmark", "Box Group",
+  "Emergence Capital", "Eniac Ventures", "FirstMark", "Founder Collective",
+  "Freestyle Capital", "General Atlantic", "Greenoaks", "Greycroft",
+  "Index Ventures", "Industry Ventures", "Initialized Capital", "Insight Partners",
+  "IVP", "K9 Ventures", "Kleiner Perkins", "Lerer Hippeau", "Lux Capital",
+  "Menlo Ventures", "NEA", "NextView", "Northzone", "Notable Capital",
+  "Operator Partners", "Primary Venture Partners", "Quiet Capital", "Ribbit",
+  "Salesforce Ventures", "Sapphire Ventures", "Seven Seven Six", "Sound Ventures",
+  "Spark Capital", "Susa Ventures", "Thrive Capital", "Wischoff Ventures"
+]);
+
+export async function getVcPortfolioCompanies(vcFirmId?: string): Promise<{
+  data: Array<{
+    id: string;
+    vc_name: string;
+    data_quality: "clean" | "bad" | "unknown";
+    company_name: string | null;
+    website_domain: string | null;
+    crunchbase_url: string | null;
+    logo_url: string | null;
+    status: string | null;
+    founded_date: string | null;
+    description_short: string | null;
+    city: string | null;
+    state: string | null;
+    country: string | null;
+    employee_count: string | null;
+    linkedin_url: string | null;
+    revenue_range: string | null;
+    funding_total: string | null;
+    equity_funding: string | null;
+    categories: string | null;
+  }>;
+  error?: string;
+}> {
+  if (!warehouseSupabase) {
+    return { data: [], error: "Warehouse database not configured" };
+  }
+
+  // First get VC firms for the join
+  const { data: vcFirms, error: vcError } = await warehouseSupabase
+    .schema("raw")
+    .from("vc_firms")
+    .select("id, name");
+
+  if (vcError) {
+    return { data: [], error: vcError.message };
+  }
+
+  const vcMap = new Map(vcFirms?.map((vc: { id: string; name: string }) => [vc.id, vc.name]) || []);
+
+  // Build query
+  let query = warehouseSupabase
+    .schema("raw")
+    .from("vc_portfolio_companies")
+    .select("id, vc_firm_id, company_name, website_domain, crunchbase_url, logo_url, status, founded_date, description_short, city, state, country, employee_count, linkedin_url, revenue_range, funding_total, equity_funding, categories")
+    .order("company_name", { ascending: true });
+
+  if (vcFirmId) {
+    query = query.eq("vc_firm_id", vcFirmId);
+  }
+
+  const { data, error } = await query.limit(5000);
+
+  if (error) {
+    return { data: [], error: error.message };
+  }
+
+  // Map VC names and determine data quality
+  const result = (data || []).map((row: {
+    id: string;
+    vc_firm_id: string;
+    company_name: string | null;
+    website_domain: string | null;
+    crunchbase_url: string | null;
+    logo_url: string | null;
+    status: string | null;
+    founded_date: string | null;
+    description_short: string | null;
+    city: string | null;
+    state: string | null;
+    country: string | null;
+    employee_count: string | null;
+    linkedin_url: string | null;
+    revenue_range: string | null;
+    funding_total: string | null;
+    equity_funding: string | null;
+    categories: string | null;
+  }) => {
+    const vcName = vcMap.get(row.vc_firm_id) || "Unknown";
+    let dataQuality: "clean" | "bad" | "unknown" = "unknown";
+    if (CLEAN_VCS.has(vcName)) dataQuality = "clean";
+    else if (BAD_VCS.has(vcName)) dataQuality = "bad";
+    
+    return {
+      id: row.id,
+      vc_name: vcName,
+      data_quality: dataQuality,
+      company_name: row.company_name,
+      website_domain: row.website_domain,
+      crunchbase_url: row.crunchbase_url,
+      logo_url: row.logo_url,
+      status: row.status,
+      founded_date: row.founded_date,
+      description_short: row.description_short,
+      city: row.city,
+      state: row.state,
+      country: row.country,
+      employee_count: row.employee_count,
+      linkedin_url: row.linkedin_url,
+      revenue_range: row.revenue_range,
+      funding_total: row.funding_total,
+      equity_funding: row.equity_funding,
+      categories: row.categories,
+    };
+  });
+
+  return { data: result };
+}
+
+export async function getVcFirmStats(): Promise<{
+  data: Array<{
+    id: string;
+    name: string;
+    record_count: number;
+    data_quality: "clean" | "bad" | "unknown";
+  }>;
+  error?: string;
+}> {
+  if (!warehouseSupabase) {
+    return { data: [], error: "Warehouse database not configured" };
+  }
+
+  const { data: vcFirms, error: vcError } = await warehouseSupabase
+    .schema("raw")
+    .from("vc_firms")
+    .select("id, name");
+
+  if (vcError) {
+    return { data: [], error: vcError.message };
+  }
+
+  // Get counts per VC
+  const results: Array<{ id: string; name: string; record_count: number; data_quality: "clean" | "bad" | "unknown" }> = [];
+
+  for (const vc of vcFirms || []) {
+    const { count } = await warehouseSupabase
+      .schema("raw")
+      .from("vc_portfolio_companies")
+      .select("id", { count: "exact", head: true })
+      .eq("vc_firm_id", vc.id);
+
+    let dataQuality: "clean" | "bad" | "unknown" = "unknown";
+    if (CLEAN_VCS.has(vc.name)) dataQuality = "clean";
+    else if (BAD_VCS.has(vc.name)) dataQuality = "bad";
+
+    results.push({
+      id: vc.id,
+      name: vc.name,
+      record_count: count || 0,
+      data_quality: dataQuality,
+    });
+  }
+
+  // Sort by name
+  results.sort((a, b) => a.name.localeCompare(b.name));
+
+  return { data: results };
+}
+
+export async function uploadVcCrunchbasePortfolios(
+  csvContent: string
+): Promise<{ success: boolean; error?: string; upload_id?: string; rows_inserted?: number }> {
+  if (!warehouseSupabase) {
+    return { success: false, error: "Warehouse database not configured" };
+  }
+
+  const uploadId = uuidv4();
+
+  // Parse CSV with papaparse
+  const parseResult = Papa.parse(csvContent, {
+    header: true,
+    skipEmptyLines: true,
+    delimiter: ",",
+  });
+
+  if (parseResult.errors.length > 0) {
+    return { success: false, error: `CSV Parse Error: ${parseResult.errors[0].message}` };
+  }
+
+  const csvRows = parseResult.data as Record<string, string>[];
+
+  if (csvRows.length === 0) {
+    return { success: false, error: "No data rows found in CSV" };
+  }
+
+  // Map CSV rows to database columns
+  const rows = csvRows.map((row) => ({
+    upload_id: uploadId,
+    vc_name: row["vc_name"]?.trim() || null,
+    vc_domain: row["vc_domain"]?.trim() || null,
+    website: row["website"]?.trim() || null,
+    name: row["name"]?.trim() || null,
+    operating_status: row["operating_status"]?.trim() || null,
+    founded_date: row["founded_date"]?.trim() || null,
+    full_description: row["full_description"]?.trim() || null,
+    short_description: row["short_description"]?.trim() || null,
+    city: row["city"]?.trim() || null,
+    state: row["state"]?.trim() || null,
+    country: row["country"]?.trim() || null,
+    number_employees: row["number_employees"]?.trim() || null,
+    linkedin_url: row["linkedin_url"]?.trim() || null,
+  }));
+
+  // Insert in batches
+  const batchSize = 500;
+  let totalInserted = 0;
+
+  for (let i = 0; i < rows.length; i += batchSize) {
+    const batch = rows.slice(i, i + batchSize);
+    const { error } = await warehouseSupabase
+      .schema("raw")
+      .from("vc_crunchbase_portfolios")
+      .insert(batch);
+
+    if (error) {
+      console.error("Error inserting batch:", error);
+      return { success: false, error: `Insert error at row ${i}: ${error.message}` };
+    }
+    totalInserted += batch.length;
+  }
+
+  return { success: true, upload_id: uploadId, rows_inserted: totalInserted };
+}
+
+// ============ SalesNav Batch Download Actions ============
+
+const SALESNAV_BATCH_SIZE = 10000;
+
+export async function getSalesNavBatchInfo(): Promise<{
+  total_records: number;
+  total_batches: number;
+  batch_size: number;
+}> {
+  if (!warehouseSupabase) {
+    return { total_records: 0, total_batches: 0, batch_size: SALESNAV_BATCH_SIZE };
+  }
+
+  const { count } = await warehouseSupabase
+    .schema("raw")
+    .from("salesnav_scrapes")
+    .select("id", { count: "exact", head: true });
+
+  const totalRecords = count || 0;
+  const totalBatches = Math.ceil(totalRecords / SALESNAV_BATCH_SIZE);
+
+  return {
+    total_records: totalRecords,
+    total_batches: totalBatches,
+    batch_size: SALESNAV_BATCH_SIZE,
+  };
+}
+
+export async function downloadSalesNavBatchAsCsv(
+  batchNumber: number
+): Promise<{ success: boolean; csv?: string; filename?: string; record_count?: number; error?: string }> {
+  if (!warehouseSupabase) {
+    return { success: false, error: "Warehouse database not configured" };
+  }
+
+  const offset = batchNumber * SALESNAV_BATCH_SIZE;
+
+  // Fetch records for this batch
+  // Note: Must explicitly set limit to override Supabase's default 1000 row cap
+  const { data, error } = await warehouseSupabase
+    .schema("raw")
+    .from("salesnav_scrapes")
+    .select(`
+      id,
+      matching_filters,
+      linkedin_user_profile_urn,
+      first_name,
+      last_name,
+      email,
+      phone_number,
+      profile_headline,
+      profile_summary,
+      job_title,
+      job_description,
+      job_started_on,
+      linkedin_url_user_profile,
+      location,
+      company,
+      linkedin_company_profile_urn,
+      linkedin_url_company,
+      company_website,
+      company_description,
+      company_headcount,
+      company_industries,
+      company_registered_address,
+      export_title,
+      export_timestamp,
+      notes
+    `)
+    .order("id", { ascending: true })
+    .range(offset, offset + SALESNAV_BATCH_SIZE - 1)
+    .limit(SALESNAV_BATCH_SIZE);
+
+  if (error) {
+    return { success: false, error: error.message };
+  }
+
+  if (!data || data.length === 0) {
+    return { success: false, error: "No records found for this batch" };
+  }
+
+  // Generate CSV using papaparse
+  const csv = Papa.unparse(data);
+
+  // QA: Use actual data.length from database response, not expected batch size
+  const actualRecordCount = data.length;
+  const startRow = offset + 1;
+  const endRow = offset + actualRecordCount;
+  const filename = `salesnav_batch_${batchNumber}_rows_${startRow}-${endRow}.csv`;
+
+  console.log(`[SalesNav Download] Batch ${batchNumber}: Requested ${SALESNAV_BATCH_SIZE}, Got ${actualRecordCount} records (rows ${startRow}-${endRow})`);
+
+  return {
+    success: true,
+    csv,
+    filename,
+    record_count: data.length,
+  };
 }
