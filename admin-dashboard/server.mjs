@@ -5,12 +5,17 @@ import next from 'next';
 // Set project name for port registry
 process.env.PROJECT_NAME = 'admin-dashboard';
 
-// Dynamic import after setting PROJECT_NAME
-const { port } = await import('port-registry/port-client');
-
 const dev = process.env.NODE_ENV !== 'production';
 const hostname = 'localhost';
-const allocatedPort = await port;
+
+// Try to use port-registry if available, otherwise use default port 3000
+let allocatedPort = 3000;
+try {
+  const { port } = await import('port-registry/port-client');
+  allocatedPort = await port;
+} catch {
+  // port-registry not available, use default
+}
 
 const app = next({ dev, hostname, port: allocatedPort });
 const handle = app.getRequestHandler();

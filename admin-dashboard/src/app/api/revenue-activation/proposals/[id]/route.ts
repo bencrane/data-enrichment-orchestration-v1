@@ -19,10 +19,10 @@ export async function GET(
     return NextResponse.json({ error: "Invalid proposal ID" }, { status: 400 });
   }
 
-  // Get proposal with line items
+  // Get proposal
   const { data: proposal, error: proposalError } = await hqRevenueActivationSupabase
     .from("proposals")
-    .select("id, client_id, status, special_terms, created_at, updated_at")
+    .select("id, company_id, booking_id, concept, concept_slug, organizer_email, special_terms, status, created_at, updated_at")
     .eq("id", proposalId)
     .single();
 
