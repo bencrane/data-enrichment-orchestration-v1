@@ -1943,7 +1943,8 @@ export async function uploadSalesNavToWarehouse(
   csvContent: string,
   exportTitle: string | null,
   exportTimestamp: string | null,
-  notes: string | null
+  notes: string | null,
+  scrapeSettingsId: string | null = null
 ): Promise<{ success: boolean; error?: string; upload_id?: string; rows_inserted?: number }> {
   if (!warehouseSupabase) {
     return { success: false, error: "Warehouse database not configured" };
@@ -2027,6 +2028,7 @@ export async function uploadSalesNavToWarehouse(
       export_title: exportTitle || null,
       export_timestamp: parsedTimestamp,
       notes: notes || null,
+      scrape_settings_id: scrapeSettingsId || null,
     };
 
     for (const [csvHeader, dbColumn] of Object.entries(headerMapping)) {
