@@ -1,6 +1,0 @@
-{
-  "buildCommand": "cd admin-dashboard && npm install && npm run build",
-  "outputDirectory": "admin-dashboard/.next",
-  "framework": "nextjs",
-  "installCommand": "cd admin-dashboard && npm install"
-}
